@@ -1,5 +1,3 @@
-install.packages("shiny")
-
 # Loading necessary libraries
 library(readr)
 library(dplyr)
@@ -196,89 +194,66 @@ merged_data <- feature_engineering(merged_data)
 
 ## IV. Exploratory Data Analaysis and Visualization:
 
-# 1.Plotting numerical features distribution 
-library(shiny)
-library(ggplot2)
-
-# UI
-ui <- fluidPage(
-  titlePanel("Numerical Features Distribution"),
-  sidebarLayout(
-    sidebarPanel(
-      selectInput("datasetInput", "Choose a dataset:",
-                  choices = c("Merged Data" = "merged", 
-                              "PrinceRez Data" = "princerez", 
-                              "Other Channels Data" = "other_channels")),
-      selectInput("featureInput", "Choose a feature:",
-                  choices = c("View Count" = "view_count", 
-                              "Like Count" = "like_count", 
-                              "Comment Count" = "comment_count", 
-                              "Duration" = "duration", 
-                              "Engagement Score" = "engagement_score"))
-    ),
-    mainPanel(
-      plotOutput("featurePlot")
-    )
-  )
-)
-
-# Server
-server <- function(input, output) {
-  output$featurePlot <- renderPlot({
-    dataset <- switch(input$datasetInput,
-                      "merged" = merged_data,
-                      "princerez" = data_princerez,
-                      "other_channels" = data_other_channels)
-    
-    ggplot(dataset, aes_string(x = input$featureInput)) +
-      geom_histogram(bins = 50, fill = "blue", color = "black") +
-      ggtitle(paste("Distribution of", input$featureInput)) +
-      xlab(input$featureInput) +
-      ylab("Frequency")
-  })
-}
-
-# Run the application
-shinyApp(ui = ui, server = server)
-
-# EDA 2 TO 9 done using one app
 library(shiny)
 library(ggplot2)
 library(dplyr)
 library(tm)
 library(wordcloud)
 library(RColorBrewer)
+library(shiny)
+library(ggplot2)
+library(dplyr)
+library(tm)
+library(wordcloud)
+library(RColorBrewer)
+library(wordcloud2)  
 
-# Assuming datasets and preprocessing steps are completed
-
-# UI Definition
+# UI
 ui <- fluidPage(
-  titlePanel("Video Engagement Analysis"),
+  tags$head(
+    tags$style(HTML("
+      #wordcloudOutput { 
+        margin-top: -50px; /* Adjust this value to reduce the gap */
+      }
+      .shiny-output-error { 
+        display: none; /* This will hide the error if the output is not ready yet */
+      }
+    "))
+  ),
+  titlePanel("Exploratory Data Analysis and Visualization"),
   sidebarLayout(
     sidebarPanel(
       selectInput("datasetInput", "Choose a dataset:",
-                  choices = c("Merged Data" = "merged", 
-                              "PrinceRez Data" = "princerez", 
+                  choices = c("Merged Data" = "merged",
+                              "PrinceRez Data" = "princerez",
                               "Other Channels Data" = "other_channels")),
       selectInput("analysisType", "Choose an analysis type:",
-                  choices = c("Class Imbalance" = "class_imbalance", # 2
+                  choices = c("Numerical Features Distribution" = "num_features_dist", # 1
+                              "Class Imbalance" = "class_imbalance", # 2
                               "Weekday vs Weekend Engagement" = "weekday_weekend", # 3
                               "Title Length vs Engagement" = "title_length", # 4
                               "Description Length vs Engagement" = "description_length", # 4
                               "Video Definition vs Engagement" = "video_definition", # 5
                               "Video Length Category vs Engagement" = "video_length_category", # 6
-                              "Keyword Analysis - High Engagement Titles" = "keyword_analysis")) # 7
+                              "Keyword Analysis - High Engagement Titles" = "keyword_analysis")), # 7
+      conditionalPanel(condition = "input.analysisType == 'num_features_dist'",
+                       selectInput("featureInput", "Choose a feature:",
+                                   choices = c("View Count" = "view_count",
+                                               "Like Count" = "like_count",
+                                               "Comment Count" = "comment_count",
+                                               "Duration" = "duration",
+                                               "Engagement Score" = "engagement_score")))
     ),
     mainPanel(
       plotOutput("plotOutput"),
-      uiOutput("wordCloudOutput")
+      conditionalPanel(condition = "input.analysisType == 'keyword_analysis'",
+                       htmlOutput("wordcloudOutput", style = "align: center;"))
     )
   )
 )
 
 # Server Logic
 server <- function(input, output) {
-  
   # Reactive expression to select dataset
   selectedDataset <- reactive({
     switch(input$datasetInput,
@@ -290,12 +265,20 @@ server <- function(input, output) {
   # Output for plots
   output$plotOutput <- renderPlot({
     req(selectedDataset()) # Ensure the dataset is selected
-    
     dataset <- selectedDataset()
     analysisType <- input$analysisType
     
-    # 2. Checking for class imbalance
-    if (analysisType == "class_imbalance") {
+    if (analysisType == "num_features_dist") {
+      # Plot numerical features distribution
+      ggplot(dataset, aes_string(x = input$featureInput)) +
+        geom_histogram(bins = 50, fill = "blue", color = "black") +
+        ggtitle(paste("Distribution of", input$featureInput)) +
+        xlab(input$featureInput) +
+        ylab("Frequency")
+    }
+    
+    else if (analysisType == "class_imbalance") {
+      # Class Imbalance Analysis
       ggplot(dataset, aes(x=engagement_category)) +
         geom_bar() +
         ggtitle("Class Imbalance in Engagement Category") +
@@ -303,82 +286,77 @@ server <- function(input, output) {
         ylab("Count")
     }
     
-    # 3. Weekday vs Weekend Engagement Score Analysis
     else if (analysisType == "weekday_weekend") {
+      # Weekday vs Weekend Engagement Score Analysis
       ggplot(dataset, aes(x=factor(is_weekend), y=engagement_score, fill=factor(is_weekend))) +
-        geom_bar(stat="summary", fun="mean") +
+        geom_bar(stat="summary", fun.y="mean") +
         scale_fill_discrete(name="Day Type", labels=c("Weekday", "Weekend")) +
         labs(title="Average Engagement Score by Day Type", y="Average Engagement Score", x="Day Type") +
         theme_minimal()
     }
     
-    # 4. Title and Description Length vs Engagement Analysis
-    else if (analysisType == "title_length") {
-      ggplot(dataset, aes(x=title_length, y=engagement_score)) +
+    else if (analysisType %in% c("title_length", "description_length")) {
+      # Title and Description Length vs Engagement Analysis
+      feature <- if (analysisType == "title_length") "title_length" else "description_length"
+      ggplot(dataset, aes_string(x = feature, y = "engagement_score")) +
         geom_point() +
-        geom_smooth(method="lm") +
-        labs(title="Engagement Score by Title Length", y="Engagement Score", x="Title Length")
-    }
-    else if (analysisType == "description_length") {
-      ggplot(dataset, aes(x=description_length, y=engagement_score)) +
-        geom_point() +
-        geom_smooth(method="lm") +
-        labs(title="Engagement Score by Description Length", y="Engagement Score", x="Description Length")
+        geom_smooth(method = "lm") +
+        labs(title = paste("Engagement Score by", gsub("_", " ", feature)), y = "Engagement Score", x = gsub("_", " ", feature))
     }
     
-    # 5. Video Definition vs Engagement Analysis
     else if (analysisType == "video_definition") {
+      # Video Definition vs Engagement Analysis
       ggplot(dataset, aes(x=definition, y=engagement_score, fill=definition)) +
         geom_boxplot() +
         labs(title="Engagement Score by Video Definition", y="Engagement Score", x="Video Definition")
     }
     
-    # 6. Video Length Category vs Engagement Analysis
     else if (analysisType == "video_length_category") {
+      # Video Length Category vs Engagement Analysis
       ggplot(dataset, aes(x=duration_category, y=engagement_score, fill=duration_category)) +
         geom_boxplot() +
         labs(title="Engagement Score by Video Length Category", y="Engagement Score", x="Video Length Category")
     }
     
-    # Return NULL if the plot output is not suitable for the selected analysis
+    # Ensure to return NULL for analyses not generating a plot
     else {
       return(NULL)
     }
   })
   
-  # Output for word cloud - only displayed for Keyword Analysis
+  # Output for word cloud - only for Keyword Analysis
   output$wordCloudOutput <- renderUI({
     if (input$analysisType == "keyword_analysis") {
-      # The actual word cloud generation is handled in an observer due to its nature
-      return(NULL)
-    } else {
-      return(NULL)
+      # Placeholder for UI Output
+      textOutput("placeholder")
     }
   })
   
-  # 7. Keyword Analysis - Observing and dynamically generating word cloud
-  observe({
-    if (input$analysisType == "keyword_analysis") {
-      high_engagement_titles <- selectedDataset()$title[selectedDataset()$engagement_category == "High"]
-      
-      corpus <- Corpus(VectorSource(high_engagement_titles))
-      corpus <- tm_map(corpus, content_transformer(tolower))
-      corpus <- tm_map(corpus, removePunctuation)
-      corpus <- tm_map(corpus, removeNumbers)
-      corpus <- tm_map(corpus, removeWords, stopwords("english"))
-      tdm <- TermDocumentMatrix(corpus)
-      m <- as.matrix(tdm)
-      word_counts <- sort(rowSums(m), decreasing = TRUE)
-      df_word_freq <- data.frame(word = names(word_counts), freq = word_counts)
-      
-      # Display word cloud in a separate observer
-      wordcloud(words = df_word_freq$word, freq = df_word_freq$freq, min.freq = 1,
-                max.words=200, random.order=FALSE, rot.per=0.35, colors=brewer.pal(8, "Dark2"))
-    }
+  # Keyword Analysis - Generating word cloud with wordcloud2
+  output$wordcloudOutput <- renderUI({
+    req(input$analysisType == "keyword_analysis")
+    dataset <- selectedDataset()
+    high_engagement_titles <- dataset$title[dataset$engagement_category == "High"]
+    
+    # Process titles to get frequencies
+    words <- tolower(unlist(strsplit(high_engagement_titles, " ")))
+    words <- words[!words %in% stopwords("en")]  # Remove stopwords
+    word_freq <- table(words)
+    word_freq <- as.data.frame(word_freq)
+    names(word_freq) <- c("word", "freq")
+    
+    # Render word cloud
+    wordcloud2(word_freq)
   })
 }
 
 # Run the app
 shinyApp(ui = ui, server = server)
 
-## 5. MODELLING
+
+## V. Model Building
+
+
+
+
+

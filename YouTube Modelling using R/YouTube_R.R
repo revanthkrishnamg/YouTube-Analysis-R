@@ -30,20 +30,19 @@ file_paths <- c(
   "C:/Users/Administrator/Documents/R_2/PrinceRez_Codm_Videos.csv"
 )
 
-# Read, combine all datasets with explicit column types, and add channel name
+# Merging the datasets
 merged_data <- lapply(file_paths, function(x) {
   channel_name <- tools::file_path_sans_ext(basename(x)) %>% gsub("_Codm_Videos", "", .)
   temp_data <- read_csv(x, col_types = col_types) %>% mutate(channel_name = channel_name)
   return(temp_data)
 }) %>% bind_rows()
 
-# Convert comment_count to numeric, handling non-numeric values gracefully
+# Convert comment_count to numeric
 merged_data$comment_count <- as.numeric(as.character(merged_data$comment_count))
 
 # Segmenting the merged data for different models
 data_princerez <- merged_data %>% filter(channel_name == "PrinceRez")
 data_other_channels <- merged_data %>% filter(channel_name != "PrinceRez")
-# merged_data is already the combined dataset for the Combined Model
 
 View(merged_data)
 View(data_princerez)
@@ -115,7 +114,7 @@ feature_engineering <- function(dataset) {
                                    labels = c("short", "medium", "long"),
                                    right = FALSE)
   
-  # Log Transformation with an epsilon to avoid log(0)
+  # Log Transformation with epsilon -> 1 to avoid log(0)
   epsilon <- 1
   dataset$log_view_count <- log(dataset$view_count + epsilon)
   dataset$log_like_count <- log(dataset$like_count + epsilon)
@@ -138,7 +137,7 @@ feature_engineering <- function(dataset) {
   temp_scores <- mapply(calculate_z_weighted_engagement_score, 
                         dataset$z_view_count, dataset$z_like_count, dataset$z_comment_count)
   
-  # Rescaling the temporary scores to a 0-100 range
+  # Rescaling to 0-100 range
   dataset$engagement_score <- (temp_scores - min(temp_scores, na.rm = TRUE)) / 
     (max(temp_scores, na.rm = TRUE) - min(temp_scores, na.rm = TRUE)) * 100
   
@@ -213,10 +212,10 @@ ui <- fluidPage(
   tags$head(
     tags$style(HTML("
       #wordcloudOutput { 
-        margin-top: -50px; /* Adjust this value to reduce the gap */
+        margin-top: -25px; 
       }
       .shiny-output-error { 
-        display: none; /* This will hide the error if the output is not ready yet */
+        display: none; 
       }
     "))
   ),
@@ -252,9 +251,8 @@ ui <- fluidPage(
   )
 )
 
-# Server Logic
 server <- function(input, output) {
-  # Reactive expression to select dataset
+  # UI to select dataset
   selectedDataset <- reactive({
     switch(input$datasetInput,
            "merged" = merged_data,
@@ -264,7 +262,7 @@ server <- function(input, output) {
   
   # Output for plots
   output$plotOutput <- renderPlot({
-    req(selectedDataset()) # Ensure the dataset is selected
+    req(selectedDataset()) 
     dataset <- selectedDataset()
     analysisType <- input$analysisType
     
@@ -353,10 +351,224 @@ server <- function(input, output) {
 # Run the app
 shinyApp(ui = ui, server = server)
 
-
 ## V. Model Building
+# Approach:
+
+library(dplyr)
+
+prepare_dataset <- function(dataset) {
+  # Applying one-hot encoding
+  dataset <- dataset %>%
+    mutate(definition_hd = as.integer(definition == "hd"),
+           is_weekend = as.integer(is_weekend == 1)) %>%
+    select(-definition) # Remove the original 'definition' column
+  
+  # Convert to factors to ensure categorical treatment
+  dataset$duration_category <- as.factor(dataset$duration_category)
+  dataset$day_of_week <- as.factor(dataset$day_of_week)
+  dataset$engagement_category <- as.factor(dataset$engagement_category)
+  
+  # Using model.matrix to create one-hot encoded columns
+  dataset_with_dummies <- cbind(dataset, model.matrix(~ duration_category + day_of_week + engagement_category - 1, data = dataset))
+
+  dataset_with_dummies <- select(dataset_with_dummies, -c(duration_category, day_of_week, engagement_category))
+  
+  relevant_features <- c("duration", "definition_hd", "upload_hour", "upload_day", "upload_month", "upload_year", "is_weekend",
+                         grep("duration_category", names(dataset_with_dummies), value = TRUE),
+                         grep("day_of_week", names(dataset_with_dummies), value = TRUE),
+                         grep("engagement_category", names(dataset_with_dummies), value = TRUE))
+  
+  # Keeping only the relevant features
+  dataset_final <- dataset_with_dummies[, relevant_features]
+  
+  return(dataset_final)
+}
+
+# Applying the function to the datasets
+data_princerez_prepared <- prepare_dataset(data_princerez)
+data_other_channels_prepared <- prepare_dataset(data_other_channels)
+merged_data_prepared <- prepare_dataset(merged_data)
+
+View(merged_data_prepared)
+
+# Removing some columns which are not important for the modelling
+data_princerez_prepared <- data_princerez_prepared %>%
+  select(-upload_year, -duration_categorylong, -upload_day, -upload_month)
+data_other_channels_prepared <- data_other_channels_prepared %>%
+  select(-upload_year, -duration_categorylong, -upload_day, -upload_month)
+merged_data_prepared <- merged_data_prepared %>%
+  select(-upload_year, -duration_categorylong, -upload_day, -upload_month)
+
+data_princerez_prepared <- data_princerez_prepared %>%
+  mutate(upload_hour = as.integer(upload_hour))
+data_other_channels_prepared <- data_other_channels_prepared %>%
+  mutate(upload_hour = as.integer(upload_hour))
+merged_data_prepared <- merged_data_prepared %>%
+  mutate(upload_hour = as.integer(upload_hour))
+
+sapply(data_princerez_prepared, class)
+
+## MODELLING 
+
+library(caret)
+library(dplyr)
+library(e1071) 
+library(plyr)
+
+train_and_evaluate_models <- function(dataset, target_column) {
+  # Ensure the target column is a factor with valid R variable names for levels
+  dataset[[target_column]] <- as.factor(dataset[[target_column]])
+  levels(dataset[[target_column]]) <- make.names(levels(dataset[[target_column]]))
+  
+  # Split the data into features and target
+  y <- dataset[[target_column]]
+  X <- dataset %>% select(-which(names(dataset) == target_column))
+  
+  # Creating training and test sets - 70% train, 30% test
+  set.seed(0)
+  trainIndex <- createDataPartition(y, p = .7, list = FALSE)
+  X_train <- X[trainIndex, ]
+  y_train <- y[trainIndex]
+  X_test <- X[-trainIndex, ]
+  y_test <- y[-trainIndex]
+  
+  models <- list(
+    LogisticRegression = list(model = "glm", preProcess = TRUE),
+    KNN = list(model = "knn", preProcess = TRUE),
+    DecisionTree = list(model = "rpart", preProcess = FALSE),
+    RandomForest = list(model = "rf", preProcess = FALSE),
+    GaussianNB = list(model = "nb", preProcess = TRUE),
+    SVM = list(model = "svmLinear", preProcess = TRUE)
+  )
+  
+  results_list <- list()
+  
+  for (model_name in names(models)) {
+    cat("Training and evaluating model:", model_name, "\n")
+    
+    current_model <- models[[model_name]]
+    model_info <- trainControl(method = "cv", number = 5, classProbs = TRUE, summaryFunction = twoClassSummary)
+    
+    if (current_model$preProcess) {
+      preProcess_params <- preProcess(X_train, method = c("center", "scale"))
+      X_train_processed <- predict(preProcess_params, X_train)
+      X_test_processed <- predict(preProcess_params, X_test)
+    } else {
+      X_train_processed <- X_train
+      X_test_processed <- X_test
+    }
+      trained_model <- train(x = X_train_processed, y = y_train, method = current_model$model, trControl = model_info)
+      predictions <- predict(trained_model, newdata = X_test_processed)
+    
+    cm <- confusionMatrix(predictions, y_test)
+    
+    results_list[[model_name]] <- list(
+      Model = model_name,
+      Accuracy = cm$overall['Accuracy'],
+      Recall = cm$byClass['Sensitivity'],
+      F1_Score = cm$byClass['F1']
+    )
+  }
+  
+  results_df <- ldply(results_list, data.frame)
+  
+  return(results_df)
+}
+
+# Applying the function to the datasets
+results_princerez <- train_and_evaluate_models(data_princerez_prepared, "engagement_categoryHigh")
+results_other_channels <- train_and_evaluate_models(data_other_channels_prepared, "engagement_categoryHigh")
+results_merged <- train_and_evaluate_models(merged_data_prepared, "engagement_categoryHigh")
+
+print(results_princerez)
+print(results_other_channels)
+print(results_merged)
+
+### TAKING THE BEST MODELS FOR THE 3 DATASETS AND BUILDING THEM
+
+train_model_and_evaluate <- function(dataset, model_type, target_column, save_filename) {
+  # Ensuring the target column is a factor
+  dataset[[target_column]] <- as.factor(dataset[[target_column]])
+  
+  # Splitting the data into features and target
+  y <- dataset[[target_column]]
+  X <- dataset %>% select(-which(names(dataset) == target_column))
+  
+  # Splitting into training and test sets, similar as above, 70% train and 30% test
+  set.seed(0) 
+  trainIndex <- createDataPartition(y, p = .7, list = FALSE)
+  X_train <- X[trainIndex, ]
+  y_train <- y[trainIndex]
+  X_test <- X[-trainIndex, ]
+  y_test <- y[-trainIndex]
+  
+  # Training the model
+  model_info <- trainControl(method = "cv", number = 5, classProbs = TRUE, summaryFunction = twoClassSummary)
+  if(model_type == "SVM") {
+    model <- train(x = X_train, y = y_train, method = "svmLinear", trControl = model_info)
+  } else {
+    model <- train(x = X_train, y = y_train, method = model_type, trControl = model_info)
+  }
+  
+  # Predicting on the test set
+  predictions <- predict(model, X_test)
+  prob_predictions <- predict(model, X_test, type = "prob")[,2] # Get class probabilities for ROC
+  
+  # Confusion Matrix
+  cm <- confusionMatrix(predictions, y_test)
+  print(cm)
+  
+  # ROC curve and AUC
+  roc_result <- roc(response = y_test, predictor = as.numeric(prob_predictions), levels = rev(levels(y_test)))
+  plot(roc_result, main = paste("ROC Curve for", model_type))
+  print(auc(roc_result))
+  
+  # Saving the model
+  saveRDS(model, save_filename)
+}
+
+# Applying it to our datasets
+train_model_and_evaluate(data_princerez_prepared, "glm", "engagement_categoryHigh", "model_princerez.rds")
+train_model_and_evaluate(data_other_channels_prepared, "rpart", "engagement_categoryHigh", "model_other_channels.rds")
+train_model_and_evaluate(merged_data_prepared, "SVM", "engagement_categoryHigh", "model_merged.rds")
 
 
+## MAKING A PREDICTION
 
+# Loading the models
+model_princerez <- readRDS("model_princerez.rds")
+model_other_channels <- readRDS("model_other_channels.rds")
+model_merged <- readRDS("model_merged.rds")
 
+# 3 row s of Test Data
+test_data <- data.frame(
+  duration = c(60, 120, 180), 
+  definition_hd = c(1, 1, 0), 
+  upload_hour = c(15, 8, 22), 
+  is_weekend = c(0, 1, 0), 
+  duration_categoryshort = c(1, 0, 0), 
+  duration_categorymedium = c(0, 1, 0),
+  day_of_week1 = c(0, 0, 1),
+  day_of_week2 = c(1, 0, 0),
+  day_of_week3 = c(0, 1, 0),
+  day_of_week4 = c(0, 0, 0),
+  day_of_week5 = c(0, 0, 0),
+  day_of_week6 = c(0, 0, 0)
+)
 
+# Making predictions with each model 
+predictions_princerez <- predict(model_princerez, test_data, type = "raw")
+predictions_other_channels <- predict(model_other_channels, test_data, type = "raw")
+predictions_merged <- predict(model_merged, test_data, type = "raw")
+
+# Combining predictions to get the majority vote 
+get_majority_vote <- function(princerez, other_channels, merged) {
+  votes <- c(princerez, other_channels, merged)
+  majority_vote <- ifelse(sum(votes == "X1") >= 2, "X1", "X0")
+  return(majority_vote)
+}
+
+final_predictions <- mapply(get_majority_vote, predictions_princerez, predictions_other_channels, predictions_merged)
+
+# Print final predictions
+print(final_predictions)

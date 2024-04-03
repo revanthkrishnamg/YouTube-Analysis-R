@@ -97,7 +97,7 @@ data_princerez <- clean_data(data_princerez)
 data_other_channels <- clean_data(data_other_channels)
 merged_data <- clean_data(merged_data)
 
-# III. FEATURE ENGINEERING (applied to each dataset)
+## III. FEATURE ENGINEERING (applied to each dataset)
 
 feature_engineering <- function(dataset) {
   # Time of Upload
@@ -351,6 +351,7 @@ server <- function(input, output) {
 # Run the app
 shinyApp(ui = ui, server = server)
 
+
 ## V. Model Building
 # Approach:
 
@@ -414,6 +415,8 @@ library(caret)
 library(dplyr)
 library(e1071) 
 library(plyr)
+library(pROC)
+
 
 train_and_evaluate_models <- function(dataset, target_column) {
   # Ensure the target column is a factor with valid R variable names for levels
@@ -489,6 +492,7 @@ print(results_merged)
 train_model_and_evaluate <- function(dataset, model_type, target_column, save_filename) {
   # Ensuring the target column is a factor
   dataset[[target_column]] <- as.factor(dataset[[target_column]])
+  levels(dataset[[target_column]]) <- make.names(levels(dataset[[target_column]]))
   
   # Splitting the data into features and target
   y <- dataset[[target_column]]

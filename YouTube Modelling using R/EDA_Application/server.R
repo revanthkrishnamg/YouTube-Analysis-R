@@ -197,53 +197,82 @@ library(tm)
 library(wordcloud)
 library(RColorBrewer)
 library(wordcloud2)  
+library(plotly)
 
-
-# UI Definition
-ui <- fluidPage(
-  tags$head(
-    tags$style(HTML("
-      #wordcloudOutput { 
-        margin-top: -25px; 
-      }
-      .shiny-output-error { 
-        display: none; 
-      }
-    "))
-  ),
-  titlePanel("Exploratory Data Analysis and Visualization"),
-  sidebarLayout(
-    sidebarPanel(
-      selectInput("datasetInput", "Choose a dataset:",
-                  choices = c("Merged Data" = "merged",
-                              "PrinceRez Data" = "princerez",
-                              "Other Channels Data" = "other_channels")),
-      selectInput("analysisType", "Choose an analysis type:",
-                  choices = c("Numerical Features Distribution" = "num_features_dist",
-                              "Class Imbalance" = "class_imbalance",
-                              "Weekday vs Weekend Engagement" = "weekday_weekend",
-                              "Title Length vs Engagement" = "title_length",
-                              "Description Length vs Engagement" = "description_length",
-                              "Video Definition vs Engagement" = "video_definition",
-                              "Video Length Category vs Engagement" = "video_length_category",
-                              "Keyword Analysis - High Engagement Titles" = "keyword_analysis")),
-      conditionalPanel(
-        condition = "input.analysisType == 'num_features_dist'",
-        selectInput("featureInput", "Choose a feature:",
-                    choices = c("View Count" = "view_count",
-                                "Like Count" = "like_count",
-                                "Comment Count" = "comment_count",
-                                "Duration" = "duration",
-                                "Engagement Score" = "engagement_score"))
-      )
-    ),
-    mainPanel(
-      plotOutput("plotOutput"),
-      htmlOutput("wordcloudOutput", style = "align: center;")
-    )
-  )
-)
-
-
-
-
+# Server Logic
+server <- function(input, output) {
+  selectedDataset <- reactive({
+    switch(input$datasetInput,
+           "merged" = merged_data,
+           "princerez" = data_princerez,
+           "other_channels" = data_other_channels)
+  })
+  
+  output$dynamicOutput <- renderUI({
+    if (input$analysisType == "keyword_analysis") {
+      wordcloud2Output("wordcloudPlot", width = "100%", height = "400px")
+    } else {
+      plotlyOutput("plotOutput", height = "400px")
+    }
+  })
+  
+  output$plotOutput <- renderPlotly({ 
+    req(selectedDataset()) 
+    dataset <- selectedDataset()
+    analysisType <- input$analysisType
+    plot <- NULL
+    
+    if (analysisType == "num_features_dist") {
+      feature <- input$featureInput
+      plot <- ggplot(dataset, aes_string(x = feature)) +
+        geom_histogram(bins = 50, fill = "blue", color = "black") +
+        ggtitle(paste("Distribution of", feature)) +
+        xlab(feature) +
+        ylab("Frequency")
+    } else if (analysisType == "class_imbalance") {
+      plot <- ggplot(dataset, aes(x = engagement_category)) +
+        geom_bar(fill = "coral") +
+        ggtitle("Class Imbalance in Engagement Category") +
+        xlab("Engagement Category") +
+        ylab("Count")
+    } else if (analysisType == "weekday_weekend") {
+      plot <- ggplot(dataset, aes(x = as.factor(is_weekend), fill = as.factor(is_weekend))) +
+        geom_bar(stat = "identity", position = "dodge") +
+        scale_fill_manual(values = c("0" = "skyblue", "1" = "orange")) +
+        labs(title = "Engagement Score by Day Type", x = "Day Type", y = "Count")
+    } else if (analysisType == "title_length" || analysisType == "description_length") {
+      feature <- ifelse(analysisType == "title_length", "title_length", "description_length")
+      plot <- ggplot(dataset, aes_string(x = feature, y = "engagement_score")) +
+        geom_point(color = "dodgerblue") +
+        geom_smooth(method = "lm", color = "red") +
+        labs(title = paste("Engagement Score by", gsub("_", " ", feature)), y = "Engagement Score", x = feature)
+    } else if (analysisType == "video_definition") {
+      plot <- ggplot(dataset, aes(x = definition, fill = definition)) +
+        geom_bar() +
+        scale_fill_brewer(palette = "Pastel1") +
+        labs(title = "Count by Video Definition", x = "Video Definition", y = "Count")
+    } else if (analysisType == "video_length_category") {
+      plot <- ggplot(dataset, aes(x = duration_category, fill = duration_category)) +
+        geom_bar() +
+        scale_fill_brewer(palette = "Set3") +
+        labs(title = "Count by Video Length Category", x = "Video Length Category", y = "Count")
+    }
+    
+    if (!is.null(plot)) {
+      ggplotly(plot)
+    }
+  })
+  
+  output$wordcloudPlot <- renderWordcloud2({
+    req(input$analysisType == "keyword_analysis")
+    dataset <- selectedDataset()
+    high_engagement_titles <- dataset$title[dataset$engagement_category == "High"]
+    
+    words <- tolower(unlist(strsplit(high_engagement_titles, "\\s+")))
+    words <- words[!words %in% stopwords("en")] 
+    word_freq <- table(words) 
+    word_freq <- as.data.frame(word_freq, stringsAsFactors = FALSE)
+    colnames(word_freq) <- c("word", "freq")
+    wordcloud2(word_freq, size = 0.7)
+  })
+}

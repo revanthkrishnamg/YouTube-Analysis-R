@@ -205,9 +205,10 @@ library(dplyr)
 library(tm)
 library(wordcloud)
 library(RColorBrewer)
-library(wordcloud2)  
+library(wordcloud2) 
+library(plotly)
 
-# UI
+# UI Definition
 ui <- fluidPage(
   tags$head(
     tags$style(HTML("
@@ -227,32 +228,34 @@ ui <- fluidPage(
                               "PrinceRez Data" = "princerez",
                               "Other Channels Data" = "other_channels")),
       selectInput("analysisType", "Choose an analysis type:",
-                  choices = c("Numerical Features Distribution" = "num_features_dist", # 1
-                              "Class Imbalance" = "class_imbalance", # 2
-                              "Weekday vs Weekend Engagement" = "weekday_weekend", # 3
-                              "Title Length vs Engagement" = "title_length", # 4
-                              "Description Length vs Engagement" = "description_length", # 4
-                              "Video Definition vs Engagement" = "video_definition", # 5
-                              "Video Length Category vs Engagement" = "video_length_category", # 6
-                              "Keyword Analysis - High Engagement Titles" = "keyword_analysis")), # 7
-      conditionalPanel(condition = "input.analysisType == 'num_features_dist'",
-                       selectInput("featureInput", "Choose a feature:",
-                                   choices = c("View Count" = "view_count",
-                                               "Like Count" = "like_count",
-                                               "Comment Count" = "comment_count",
-                                               "Duration" = "duration",
-                                               "Engagement Score" = "engagement_score")))
+                  choices = c("Numerical Features Distribution" = "num_features_dist",
+                              "Class Imbalance" = "class_imbalance",
+                              "Weekday vs Weekend Engagement" = "weekday_weekend",
+                              "Title Length vs Engagement" = "title_length",
+                              "Description Length vs Engagement" = "description_length",
+                              "Video Definition vs Engagement" = "video_definition",
+                              "Video Length Category vs Engagement" = "video_length_category",
+                              "Keyword Analysis - High Engagement Titles" = "keyword_analysis")),
+      conditionalPanel(
+        condition = "input.analysisType == 'num_features_dist'",
+        selectInput("featureInput", "Choose a feature:",
+                    choices = c("View Count" = "view_count",
+                                "Like Count" = "like_count",
+                                "Comment Count" = "comment_count",
+                                "Duration" = "duration",
+                                "Engagement Score" = "engagement_score"))
+      )
     ),
     mainPanel(
-      plotOutput("plotOutput"),
-      conditionalPanel(condition = "input.analysisType == 'keyword_analysis'",
-                       htmlOutput("wordcloudOutput", style = "align: center;"))
+      uiOutput("dynamicOutput") # Dynamic output for either plot or word cloud
     )
   )
 )
 
+
+
+# Server Logic
 server <- function(input, output) {
-  # UI to select dataset
   selectedDataset <- reactive({
     switch(input$datasetInput,
            "merged" = merged_data,
@@ -260,93 +263,75 @@ server <- function(input, output) {
            "other_channels" = data_other_channels)
   })
   
-  # Output for plots
-  output$plotOutput <- renderPlot({
+  output$dynamicOutput <- renderUI({
+    if (input$analysisType == "keyword_analysis") {
+      wordcloud2Output("wordcloudPlot", width = "100%", height = "400px")
+    } else {
+      plotlyOutput("plotOutput", height = "400px")
+    }
+  })
+  
+  output$plotOutput <- renderPlotly({ 
     req(selectedDataset()) 
     dataset <- selectedDataset()
     analysisType <- input$analysisType
+    plot <- NULL
     
     if (analysisType == "num_features_dist") {
-      # Plot numerical features distribution
-      ggplot(dataset, aes_string(x = input$featureInput)) +
+      feature <- input$featureInput
+      plot <- ggplot(dataset, aes_string(x = feature)) +
         geom_histogram(bins = 50, fill = "blue", color = "black") +
-        ggtitle(paste("Distribution of", input$featureInput)) +
-        xlab(input$featureInput) +
+        ggtitle(paste("Distribution of", feature)) +
+        xlab(feature) +
         ylab("Frequency")
-    }
-    
-    else if (analysisType == "class_imbalance") {
-      # Class Imbalance Analysis
-      ggplot(dataset, aes(x=engagement_category)) +
-        geom_bar() +
+    } else if (analysisType == "class_imbalance") {
+      plot <- ggplot(dataset, aes(x = engagement_category)) +
+        geom_bar(fill = "coral") +
         ggtitle("Class Imbalance in Engagement Category") +
         xlab("Engagement Category") +
         ylab("Count")
+    } else if (analysisType == "weekday_weekend") {
+      plot <- ggplot(dataset, aes(x = as.factor(is_weekend), fill = as.factor(is_weekend))) +
+        geom_bar(stat = "identity", position = "dodge") +
+        scale_fill_manual(values = c("0" = "skyblue", "1" = "orange")) +
+        labs(title = "Engagement Score by Day Type", x = "Day Type", y = "Count")
+    } else if (analysisType == "title_length" || analysisType == "description_length") {
+      feature <- ifelse(analysisType == "title_length", "title_length", "description_length")
+      plot <- ggplot(dataset, aes_string(x = feature, y = "engagement_score")) +
+        geom_point(color = "dodgerblue") +
+        geom_smooth(method = "lm", color = "red") +
+        labs(title = paste("Engagement Score by", gsub("_", " ", feature)), y = "Engagement Score", x = feature)
+    } else if (analysisType == "video_definition") {
+      plot <- ggplot(dataset, aes(x = definition, fill = definition)) +
+        geom_bar() +
+        scale_fill_brewer(palette = "Pastel1") +
+        labs(title = "Count by Video Definition", x = "Video Definition", y = "Count")
+    } else if (analysisType == "video_length_category") {
+      plot <- ggplot(dataset, aes(x = duration_category, fill = duration_category)) +
+        geom_bar() +
+        scale_fill_brewer(palette = "Set3") +
+        labs(title = "Count by Video Length Category", x = "Video Length Category", y = "Count")
     }
     
-    else if (analysisType == "weekday_weekend") {
-      # Weekday vs Weekend Engagement Score Analysis
-      ggplot(dataset, aes(x=factor(is_weekend), y=engagement_score, fill=factor(is_weekend))) +
-        geom_bar(stat="summary", fun.y="mean") +
-        scale_fill_discrete(name="Day Type", labels=c("Weekday", "Weekend")) +
-        labs(title="Average Engagement Score by Day Type", y="Average Engagement Score", x="Day Type") +
-        theme_minimal()
-    }
-    
-    else if (analysisType %in% c("title_length", "description_length")) {
-      # Title and Description Length vs Engagement Analysis
-      feature <- if (analysisType == "title_length") "title_length" else "description_length"
-      ggplot(dataset, aes_string(x = feature, y = "engagement_score")) +
-        geom_point() +
-        geom_smooth(method = "lm") +
-        labs(title = paste("Engagement Score by", gsub("_", " ", feature)), y = "Engagement Score", x = gsub("_", " ", feature))
-    }
-    
-    else if (analysisType == "video_definition") {
-      # Video Definition vs Engagement Analysis
-      ggplot(dataset, aes(x=definition, y=engagement_score, fill=definition)) +
-        geom_boxplot() +
-        labs(title="Engagement Score by Video Definition", y="Engagement Score", x="Video Definition")
-    }
-    
-    else if (analysisType == "video_length_category") {
-      # Video Length Category vs Engagement Analysis
-      ggplot(dataset, aes(x=duration_category, y=engagement_score, fill=duration_category)) +
-        geom_boxplot() +
-        labs(title="Engagement Score by Video Length Category", y="Engagement Score", x="Video Length Category")
-    }
-    
-    # Ensure to return NULL for analyses not generating a plot
-    else {
-      return(NULL)
+    if (!is.null(plot)) {
+      ggplotly(plot)
     }
   })
   
-  # Output for word cloud - only for Keyword Analysis
-  output$wordCloudOutput <- renderUI({
-    if (input$analysisType == "keyword_analysis") {
-      # Placeholder for UI Output
-      textOutput("placeholder")
-    }
-  })
-  
-  # Keyword Analysis - Generating word cloud with wordcloud2
-  output$wordcloudOutput <- renderUI({
+  output$wordcloudPlot <- renderWordcloud2({
     req(input$analysisType == "keyword_analysis")
     dataset <- selectedDataset()
     high_engagement_titles <- dataset$title[dataset$engagement_category == "High"]
     
-    # Process titles to get frequencies
-    words <- tolower(unlist(strsplit(high_engagement_titles, " ")))
-    words <- words[!words %in% stopwords("en")]  # Remove stopwords
-    word_freq <- table(words)
-    word_freq <- as.data.frame(word_freq)
-    names(word_freq) <- c("word", "freq")
-    
-    # Render word cloud
-    wordcloud2(word_freq)
+    words <- tolower(unlist(strsplit(high_engagement_titles, "\\s+")))
+    words <- words[!words %in% stopwords("en")] 
+    word_freq <- table(words) 
+    word_freq <- as.data.frame(word_freq, stringsAsFactors = FALSE)
+    colnames(word_freq) <- c("word", "freq")
+    wordcloud2(word_freq, size = 0.7)
   })
 }
+
 
 # Run the app
 shinyApp(ui = ui, server = server)
@@ -389,8 +374,6 @@ prepare_dataset <- function(dataset) {
 data_princerez_prepared <- prepare_dataset(data_princerez)
 data_other_channels_prepared <- prepare_dataset(data_other_channels)
 merged_data_prepared <- prepare_dataset(merged_data)
-
-View(merged_data_prepared)
 
 # Removing some columns which are not important for the modelling
 data_princerez_prepared <- data_princerez_prepared %>%
@@ -532,9 +515,9 @@ train_model_and_evaluate <- function(dataset, model_type, target_column, save_fi
 }
 
 # Applying it to our datasets
-train_model_and_evaluate(data_princerez_prepared, "glm", "engagement_categoryHigh", "model_princerez.rds")
-train_model_and_evaluate(data_other_channels_prepared, "rpart", "engagement_categoryHigh", "model_other_channels.rds")
-train_model_and_evaluate(merged_data_prepared, "SVM", "engagement_categoryHigh", "model_merged.rds")
+train_model_and_evaluate(data_princerez_prepared, "rf", "engagement_categoryHigh", "model_princerez.rds") # RandomForest for Princerez
+train_model_and_evaluate(data_other_channels_prepared, "rpart", "engagement_categoryHigh", "model_other_channels.rds") # DecisionTree for other_channels
+train_model_and_evaluate(merged_data_prepared, "svmLinear", "engagement_categoryHigh", "model_merged.rds") # SVM for merged
 
 
 ## MAKING A PREDICTION

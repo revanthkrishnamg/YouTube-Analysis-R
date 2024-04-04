@@ -1,22 +1,12 @@
 ---
 title: "YouTube Channel Analysis"
-format: html
+format:
+  html:
+    toc: true
 theme: cyborg
 embed-resources: true
 code-fold: true
 ---
-
-# Table of Contents
-
--   [Business Case](#business-case)
--   [Data Collection](#data-case)
--   [I. Importing and Segmenting the Data](#i-importing-and-segmenting-the-data)
--   [II. Data Cleaning](#ii-data-cleaning-applied-to-each-dataset)
--   [III. Feature Engineering](#iii-feature-engineering-applied-to-each-dataset)
--   [IV. Exploratory Data Analysis and Visualization](#iv-exploratory-data-analysis-and-visualization)
--   [V. Model Building](#v-model-building)
--   [VI. Final Test Predictions](#vi-final-test-predictions)
--   [VII. Conclusion](#vii-conclusion)
 
 ## Business Case {#business-case}
 
@@ -85,9 +75,9 @@ flowchart TD
 -   **Model Predictions**: Each model generates predictions based on the features engineered from their respective datasets.
 -   **End**: The process concludes with the final predictions, which can be used for various analytical and strategic purposes, such as understanding audience engagement and optimizing content strategy.
 
-## Data Collection {#data-case}
+## Data Collection
 
-The data for each of the channels were collected using the YouTube API via Python. \
+The data for each of the channels were collected using the YouTube API via Python.\
 [Python Jupyter Notebook for data collection (click)](https://github.com/revanthkrishnamg/YouTube-Analysis-R/blob/main/Data%20Collection%20(of%20different%20channels)%20using%20Python/Data_Collection_Python.ipynb).
 
 ## I. Importing and Segmenting the Data
@@ -314,7 +304,7 @@ data_other_channels <- feature_engineering(data_other_channels)
 merged_data <- feature_engineering(merged_data)
 ```
 
-## IV. Exploratory Data Analaysis and Visualization:
+## IV. Exploratory Data Analaysis and Visualization
 
 [Shiny App for EDA (click)](https://revanthkrishnamg.shinyapps.io/application/). -\> This application is deployed on shinyapps.io, using this we can understand and compare the different visualizations across different datasets.
 
@@ -755,4 +745,12 @@ In a nutshell, these models aren’t just tools; they’re the roadmap to make m
 
 1.  Instead of comparing my channel to just 3 channels, I need to find more similar channels and increase my other_combined and merged datasets to get understand the broad trends better.
 2.  Apply other machine learning algorithms such as AdaBoost, XGBoost, etc (which is missed here) and deep learning algorithms to see if there's a better recall score.
-3.  Further find the best hyper-parameters for tuning the 3 models selected to get better results. s
+3.  Further find the best hyper-parameters for tuning the 3 models selected to get better results.
+
+## References
+
+-   YouTube Data API. (n.d.). YouTube Developers. Retrieved from https://developers.google.com/youtube/v3.
+-   R Core Team. (2023). R: A language and environment for statistical computing. R Foundation for Statistical Computing, Vienna, Austria. Retrieved from https://www.R-project.org/.
+-   Wickham, H. (2016). ggplot2: Elegant Graphics for Data Analysis. Springer-Verlag New York. Retrieved from https://ggplot2.tidyverse.org.
+-   Fellows, I. (2014). wordcloud: Word Clouds. R package version 2.6. Retrieved from https://CRAN.R-project.org/package=wordcloud.
+-   Chang, W., Cheng, J., Allaire, J.J., Xie, Y., & McPherson, J. (2021). shiny: Web Application Framework for R. R package version 1.6.0. Retrieved from https://CRAN.R-project.org/package=shiny.

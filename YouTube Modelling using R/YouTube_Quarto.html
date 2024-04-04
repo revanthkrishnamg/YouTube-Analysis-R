@@ -3303,10 +3303,27 @@ z-index: 1000;
 
 </head>
 
-<body class="fullcontent">
+<body>
 
 <div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
-
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#business-case" id="toc-business-case" class="nav-link active" data-scroll-target="#business-case">Business Case</a></li>
+  <li><a href="#data-collection" id="toc-data-collection" class="nav-link" data-scroll-target="#data-collection">Data Collection</a></li>
+  <li><a href="#i.-importing-and-segmenting-the-data" id="toc-i.-importing-and-segmenting-the-data" class="nav-link" data-scroll-target="#i.-importing-and-segmenting-the-data">I. Importing and Segmenting the Data</a></li>
+  <li><a href="#ii.-data-cleaning-applied-to-each-dataset" id="toc-ii.-data-cleaning-applied-to-each-dataset" class="nav-link" data-scroll-target="#ii.-data-cleaning-applied-to-each-dataset">II. Data Cleaning (applied to each dataset)</a></li>
+  <li><a href="#iii.-feature-engineering-applied-to-each-dataset" id="toc-iii.-feature-engineering-applied-to-each-dataset" class="nav-link" data-scroll-target="#iii.-feature-engineering-applied-to-each-dataset">III. Feature Engineering (applied to each dataset)</a></li>
+  <li><a href="#iv.-exploratory-data-analaysis-and-visualization" id="toc-iv.-exploratory-data-analaysis-and-visualization" class="nav-link" data-scroll-target="#iv.-exploratory-data-analaysis-and-visualization">IV. Exploratory Data Analaysis and Visualization</a></li>
+  <li><a href="#v.-model-building" id="toc-v.-model-building" class="nav-link" data-scroll-target="#v.-model-building">V. Model Building</a></li>
+  <li><a href="#vi.-final-test-predictions" id="toc-vi.-final-test-predictions" class="nav-link" data-scroll-target="#vi.-final-test-predictions">VI. Final Test predictions</a></li>
+  <li><a href="#vii.-conclusion" id="toc-vii.-conclusion" class="nav-link" data-scroll-target="#vii.-conclusion">VII. Conclusion</a></li>
+  <li><a href="#references" id="toc-references" class="nav-link" data-scroll-target="#references">References</a></li>
+  </ul>
+</nav>
+</div>
 <main class="content" id="quarto-document-content">
 
 <header id="title-block-header" class="quarto-title-block default">
@@ -3326,19 +3343,6 @@ z-index: 1000;
 
 </header>
 
-<section id="table-of-contents" class="level1">
-<h1>Table of Contents</h1>
-<ul>
-<li><a href="#business-case">Business Case</a></li>
-<li><a href="#data-case">Data Collection</a></li>
-<li><a href="#i-importing-and-segmenting-the-data">I. Importing and Segmenting the Data</a></li>
-<li><a href="#ii-data-cleaning-applied-to-each-dataset">II. Data Cleaning</a></li>
-<li><a href="#iii-feature-engineering-applied-to-each-dataset">III. Feature Engineering</a></li>
-<li><a href="#iv-exploratory-data-analysis-and-visualization">IV. Exploratory Data Analysis and Visualization</a></li>
-<li><a href="#v-model-building">V. Model Building</a></li>
-<li><a href="#vi-final-test-predictions">VI. Final Test Predictions</a></li>
-<li><a href="#vii-conclusion">VII. Conclusion</a></li>
-</ul>
 <section id="business-case" class="level2">
 <h2 class="anchored" data-anchor-id="business-case">Business Case</h2>
 <p>In the competitive landscape of YouTube content creation, especially within the Call of Duty Mobile (CODM) community, understanding what drives viewer engagement is crucial for growth. This project aims to understand engagement across different channels, including my own channel (PrinceRez Codm), by using data analytics and machine learning. The approach here is to build three distinct models, each focusing on different segements of data: PrinceRez Codm channel data, aggregate data from other CODM channels, and a combined dataset encompassing both. This approach allows for a nuanced analysis of engagement drivers, balancing between my channel specific trends and broader industry patterns.</p>
@@ -3413,8 +3417,8 @@ z-index: 1000;
 <li><strong>End</strong>: The process concludes with the final predictions, which can be used for various analytical and strategic purposes, such as understanding audience engagement and optimizing content strategy.</li>
 </ul>
 </section>
-<section id="data-case" class="level2">
-<h2 class="anchored" data-anchor-id="data-case">Data Collection</h2>
+<section id="data-collection" class="level2">
+<h2 class="anchored" data-anchor-id="data-collection">Data Collection</h2>
 <p>The data for each of the channels were collected using the YouTube API via Python.<br>
 <a href="https://github.com/revanthkrishnamg/YouTube-Analysis-R/blob/main/Data%20Collection%20(of%20different%20channels)%20using%20Python/Data_Collection_Python.ipynb">Python Jupyter Notebook for data collection (click)</a>.</p>
 </section>
@@ -3684,7 +3688,7 @@ z-index: 1000;
 </div>
 </section>
 <section id="iv.-exploratory-data-analaysis-and-visualization" class="level2">
-<h2 class="anchored" data-anchor-id="iv.-exploratory-data-analaysis-and-visualization">IV. Exploratory Data Analaysis and Visualization:</h2>
+<h2 class="anchored" data-anchor-id="iv.-exploratory-data-analaysis-and-visualization">IV. Exploratory Data Analaysis and Visualization</h2>
 <p><a href="https://revanthkrishnamg.shinyapps.io/application/">Shiny App for EDA (click)</a>. -&gt; This application is deployed on shinyapps.io, using this we can understand and compare the different visualizations across different datasets.</p>
 <p>This Shiny application provides an interactive platform to explore and visualize various aspects of YouTube engagement data across different channels, including the “PrinceRez Data”, “Merged Data”, and “Other Channels Data”. The application allows to facilitate a comparative analysis through the following types of visualizations, each designed to uncover specific patterns and insights within the datasets:</p>
 <ol type="1">
@@ -4368,9 +4372,18 @@ Prediction  X0  X1
 <ol type="1">
 <li>Instead of comparing my channel to just 3 channels, I need to find more similar channels and increase my other_combined and merged datasets to get understand the broad trends better.</li>
 <li>Apply other machine learning algorithms such as AdaBoost, XGBoost, etc (which is missed here) and deep learning algorithms to see if there’s a better recall score.</li>
-<li>Further find the best hyper-parameters for tuning the 3 models selected to get better results. s</li>
+<li>Further find the best hyper-parameters for tuning the 3 models selected to get better results.</li>
 </ol>
 </section>
+<section id="references" class="level2">
+<h2 class="anchored" data-anchor-id="references">References</h2>
+<ul>
+<li>YouTube Data API. (n.d.). YouTube Developers. Retrieved from https://developers.google.com/youtube/v3.</li>
+<li>R Core Team. (2023). R: A language and environment for statistical computing. R Foundation for Statistical Computing, Vienna, Austria. Retrieved from https://www.R-project.org/.</li>
+<li>Wickham, H. (2016). ggplot2: Elegant Graphics for Data Analysis. Springer-Verlag New York. Retrieved from https://ggplot2.tidyverse.org.</li>
+<li>Fellows, I. (2014). wordcloud: Word Clouds. R package version 2.6. Retrieved from https://CRAN.R-project.org/package=wordcloud.</li>
+<li>Chang, W., Cheng, J., Allaire, J.J., Xie, Y., &amp; McPherson, J. (2021). shiny: Web Application Framework for R. R package version 1.6.0. Retrieved from https://CRAN.R-project.org/package=shiny.</li>
+</ul>
 </section>
 
 </main>

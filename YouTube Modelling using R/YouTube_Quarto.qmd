@@ -2,9 +2,23 @@
 title: "YouTube Channel Analysis"
 format: html
 theme: cyborg
+embed-resources: true
+code-fold: true
 ---
 
-## Business Case:
+# Table of Contents
+
+-   [Business Case](#business-case)
+-   [Data Collection](#data-case)
+-   [I. Importing and Segmenting the Data](#i-importing-and-segmenting-the-data)
+-   [II. Data Cleaning](#ii-data-cleaning-applied-to-each-dataset)
+-   [III. Feature Engineering](#iii-feature-engineering-applied-to-each-dataset)
+-   [IV. Exploratory Data Analysis and Visualization](#iv-exploratory-data-analysis-and-visualization)
+-   [V. Model Building](#v-model-building)
+-   [VI. Final Test Predictions](#vi-final-test-predictions)
+-   [VII. Conclusion](#vii-conclusion)
+
+## Business Case {#business-case}
 
 In the competitive landscape of YouTube content creation, especially within the Call of Duty Mobile (CODM) community, understanding what drives viewer engagement is crucial for growth. This project aims to understand engagement across different channels, including my own channel (PrinceRez Codm), by using data analytics and machine learning. The approach here is to build three distinct models, each focusing on different segements of data: PrinceRez Codm channel data, aggregate data from other CODM channels, and a combined dataset encompassing both. This approach allows for a nuanced analysis of engagement drivers, balancing between my channel specific trends and broader industry patterns.
 
@@ -71,6 +85,11 @@ flowchart TD
 -   **Model Predictions**: Each model generates predictions based on the features engineered from their respective datasets.
 -   **End**: The process concludes with the final predictions, which can be used for various analytical and strategic purposes, such as understanding audience engagement and optimizing content strategy.
 
+## Data Collection {#data-case}
+
+The data for each of the channels were collected using the YouTube API via Python. \
+[Python Jupyter Notebook for data collection (click)](https://github.com/revanthkrishnamg/YouTube-Analysis-R/blob/main/Data%20Collection%20(of%20different%20channels)%20using%20Python/Data_Collection_Python.ipynb).
+
 ## I. Importing and Segmenting the Data
 
 Here, I'm importing the 4 datasets and segregating them in segments.
@@ -129,7 +148,7 @@ head(data_other_channels)
 
 ## II. Data Cleaning (applied to each dataset)
 
-Instead of each data segments, firstly I cleaned one dataset and then made a function for it and passed all the datasets, making the code modular (have followed this approach throughout). Here, I started with handling missing values, then dropped the video_status column (since it had only 1 category - public), converted ISO 8601 durations to seconds and removed duplicate rows.
+Instead of cleaning each data segments separately, I cleaned one dataset and then made a function for it and applied this function for all the datasets, making the code modular (have followed this approach throughout). I started with handling missing values, then dropped the video_status column (since it had only 1 category - public), converted ISO 8601 durations to seconds and removed duplicate rows.
 
 ```{r}
 library(dplyr)
@@ -183,12 +202,23 @@ merged_data <- clean_data(merged_data)
 
 ## III. Feature Engineering (applied to each dataset)
 
-Similarly as above, made a feature_engineering function and applied it to all my datasets. Features created for each dataset are:\
-1. Features from time decomposition\
-2. Video Length Category\
-3. Engagement Score\
-4. Engagement Category\
-5. Title & Description Keywords
+Similarly as above, made a feature_engineering function and applied it to all my datasets. Features created for each dataset are:
+
+1.  **Time Decomposition**: Creating features from the decomposition of the upload date to capture temporal patterns. Extracting features such as the hour of upload can help identify peak engagement times. Additionally, creating a day of the week feature as a categorical variable allowing for the modeling of weekly cyclical patterns in viewer engagement.
+2.  **Video Length Category**: Simplifying video length categorization to make it more interpretable. Using thresholds that align with typical viewer preferences and content consumption patterns, such as "short" (0-3 minutes), "medium" (3-10 minutes), and "long" (over 10 minutes). This categorization gives us the most common viewing habits and can be related to the engagement levels.
+3.  **Engagement Score Enhancement**:
+    -   **Logarithmic Transformation**: Applying a logarithmic transformation to view, like, and comment counts to combat outliers and skewness. This makes sure that the engagement score is not disproportionately influenced by videos with exceptionally high metrics.
+
+    -   **Z-Score Normalization**: Standardizing these log-transformed values to have a mean of 0 and a standard deviation of 1. This normalization helps in making the comparison across different videos and accounts for variability in engagement metrics.
+
+    -   **Weighted Summation**: Assigning weights to the normalized scores (65% for views, 25% for likes, 10% for comments) to give a relative importance in engagement. This weighted approach makes sure that not all engagement metrics contribute equally to overall engagement.
+
+    -   **Rescaling**: Converting the weighted sum into an engagement score on a 0-100 scale, making it easy to interpret. This score will be used to compare engagement across videos.
+4.  **Engagement Category**: Defining engagement categories based on the engagement score to classify videos into "Low" (\<50%) and "High"(\>50%) engagement. This binary categorization simplifies the analysis and facilitates the identification of high-performing content.
+5.  **Title and Description Keywords**:
+    -   **Keyword Extraction**: Using text analysis techniques to extract meaningful keywords from video titles and descriptions. Removing stopwords and non-alphanumeric characters to focus on the analysis on significant words that might attract viewers.
+
+    -   **Frequency Analysis**: Performing a frequency analysis of the extracted keywords to identify common themes and subjects in high-engagement videos. This can guide content creation by highlighting topics of interest to the audience.
 
 ```{r}
 feature_engineering <- function(dataset) {
@@ -282,12 +312,27 @@ feature_engineering <- function(dataset) {
 data_princerez <- feature_engineering(data_princerez)
 data_other_channels <- feature_engineering(data_other_channels)
 merged_data <- feature_engineering(merged_data)
-
 ```
 
 ## IV. Exploratory Data Analaysis and Visualization:
 
 [Shiny App for EDA (click)](https://revanthkrishnamg.shinyapps.io/application/). -\> This application is deployed on shinyapps.io, using this we can understand and compare the different visualizations across different datasets.
+
+This Shiny application provides an interactive platform to explore and visualize various aspects of YouTube engagement data across different channels, including the "PrinceRez Data", "Merged Data", and "Other Channels Data". The application allows to facilitate a comparative analysis through the following types of visualizations, each designed to uncover specific patterns and insights within the datasets:
+
+1.  **Numerical Features Distribution**: The histograms are generated for selected numerical features such as view count, like count, comment count, duration, and engagement score. These visualizations help identify the distribution patterns of each metric, highlighting common engagement levels, video lengths, and the overall spread of viewer interactions.
+
+2.  **Class Imbalance Visualization**: Through bar charts, this analysis shows the distribution between different engagement categories (e.g., "Low" vs. "High"). It's important for understanding the balance of engagement levels within the dataset and informs strategies for managing imbalanced data in model training.
+
+3.  **Weekday vs. Weekend Engagement**: The bar charts compare engagement scores between weekdays and weekends, giving insights into when viewers are more active or engaged with content. This can guide content scheduling strategies for optimal engagement.
+
+4.  **Title Length vs. Engagement** and **Description Length vs. Engagement**: The scatter plots with linear regression lines analyzes the relationship between the length of video titles/descriptions and engagement scores. This visualization helps in understanding whether shorter or longer texts correlate with higher viewer engagement.
+
+5.  **Video Definition vs. Engagement**: The bar charts displays the count of videos by their definition quality (e.g., HD), providing an understanding of how video quality might influence viewer engagement.
+
+6.  **Video Length Category vs. Engagement**: Through bar charts, videos are categorized by length (short, medium, long) to explore how video duration affects engagement. This analysis can inform content creators about the preferred video lengths for maximizing viewer interest.
+
+7.  **Keyword Analysis - High Engagement Titles**: The word clouds highlight frequently occurring words in titles of high-engagement videos. This visualization offers clues about trending topics or keywords that resonate with viewers, helping in content ideation focused on increasing engagement.
 
 Below, is the code I used for deploying the EDA application:
 
@@ -566,8 +611,7 @@ print(results_other_channels)
 print(results_merged)
 ```
 
-From the above we see that:\
-For Princerez channel RandomForest shows the highest recall at 0.6097561. This is the best model in the Princerez scenario for focusing on class high engagment.\
+From the above we see that: For Princerez channel RandomForest shows the highest recall at 0.6097561. This is the best model in the Princerez scenario for focusing on class high engagment.\
 For other_channels -\> DecisionTree has the highest recall at 0.72727273.\
 For merged -\> SVM stands has the highest recall of 0.6696429 in the merged dataset.
 
@@ -629,21 +673,37 @@ train_model_and_evaluate(merged_data_prepared, "svmLinear", "engagement_category
 
 **Random Forest for Princerez Channel**
 
--   **Confusion Matrix Insights:** The RandomForest model for the Princerez dataset shows a notable accuracy of 82.22%, with a high specificity (100%) indicating that all true negatives were correctly identified. However, the sensitivity or recall (60.98%) suggests that the model is less adept at catching all true positives. The balanced accuracy of 80.49% indicates good overall performance but highlights room for improvement in recognizing true positive cases.
+-   **Confusion Matrix Insights:** The RandomForest model for the Princerez dataset shows a good accuracy of 82.22%, with a high specificity (100%) indicating that all true negatives were correctly identified. However, the sensitivity or recall (60.98%) suggests that the model is less adept at catching all true positives. The balanced accuracy of 80.49% indicates good overall performance but highlights room for improvement in recognizing true positive cases.
 
 -   **AUC Plot Analysis:** The AUC value of 0.7755 reflects a good level of model discrimination ability. It signifies the model's capability to distinguish between the classes but also hints that there's potential for enhancement, especially in identifying high engagement videos more reliably.
 
 **DecisionTree for Other Channels**
 
--   **Confusion Matrix Insights:** This model presents an accuracy of 64.13%, which is modest. The sensitivity (51.14%) and specificity (74.03%) showcase a challenge in correctly predicting high engagement videos while being reasonably good at avoiding false alarms. The relatively low kappa statistic (0.2561) points to only a slight agreement between the predictions and actual values, beyond what would be expected by chance.
+-   **Confusion Matrix Insights:** This model presents a modest accuracy of 64.13%. The sensitivity (51.14%) and specificity (74.03%) showcase a challenge in correctly predicting high engagement videos while being reasonably good at avoiding false alarms.
 
--   **AUC Plot Analysis:** With an AUC of 0.6697, the model demonstrates a fair but not excellent ability to differentiate between the high and low engagement classes. This suggests a need for refinement in how the model discerns patterns indicative of viewer engagement.
+-   **AUC Plot Analysis:** With an AUC of 0.6697, this model demonstrates a fair but not excellent ability to differentiate between the high and low engagement classes. This suggests a need for refinement in how the model discerns patterns indicative of viewer engagement.
 
 **SVM for Merged Dataset**
 
--   **Confusion Matrix Insights:** The SVM model's accuracy stands at 63.05%, with balanced accuracy (63.41%) reflecting a moderate performance. The model shows a somewhat balanced sensitivity (66.96%) and specificity (59.85%), indicating a reasonable ability to identify both true positives and true negatives. However, the differences between positive predictive value (57.69%) and negative predictive value (68.91%) suggest variability in prediction confidence across classes.
+-   **Confusion Matrix Insights:** The SVM model's accuracy stands at 63.05%, with balanced accuracy (63.41%) reflecting a moderate performance. The model shows a somewhat balanced sensitivity (66.96%) and specificity (59.85%), indicating a reasonable ability to identify both true positives and true negatives.
 
--   **AUC Plot Analysis:** The AUC of 0.6437 is the lowest among the three models, suggesting that while the SVM model can differentiate between classes to some degree, its capacity to do so is limited. This highlights the need for potential adjustments in model parameters or the incorporation of more discriminative features.
+-   **AUC Plot Analysis:** The AUC of 0.6437 is the lowest among the three models, suggesting that while the SVM model can differentiate between classes to some degree, its capacity to do so is limited. This highlights the need for potential adjustments in model parameters or add new features.
+
+**Key Insights from the model building above**:
+
+Using the Random Forest model on my PrinceRez Codm channel, I've seen impressive accuracy and specificity, which basically means I'm getting really good at spotting what doesn't work for my audience. This insight is gold—it stops me from wasting time on content that won’t catch on. The sensitivity score, though, suggests I could dive deeper into what makes content stick, perhaps by looking more into what engaging videos have in common.
+
+For other CODM channels, the DecisionTree model gives insights on the broader trends that resonate with the community. It's not perfect, but it tells me what's trending/not, allowing me to tweak my content to match wider interests while keeping my channel's flavor.
+
+The SVM model, applied across a merged dataset of several channels, stands out for its balanced take on what’s engaging and what’s not.
+
+Putting these models together, I'm carving out a strategy that’s both smart and flexible. Here’s the plan:
+
+-   **Content Differentiation**: By comparing model insights, I can pinpoint what sets PrinceRez apart. This means doubling down on what we do best, setting us apart from the crowd.
+
+-   **Audience Understanding**: These models help me get my head around the varied tastes within our audience. It’s about creating content that not only rides the CODM wave but also has that special PrinceRez flavor.
+
+-   **Strategic Content Planning**: Armed with predictions, I can schedule the content more strategically—uploading when engagement’s likely to spike and experimenting when we can afford to take risks.
 
 ## VI. Final Test predictions
 
@@ -683,26 +743,16 @@ get_majority_vote <- function(princerez, other_channels, merged) {
 
 final_predictions <- mapply(get_majority_vote, predictions_princerez, predictions_other_channels, predictions_merged)
 
-# Print final predictions
+# Printing final predictions
 print(final_predictions)
 ```
 
 ## VII. Conclusion
 
-Using the Random Forest model on my PrinceRez Codm channel, I've seen impressive accuracy and specificity, which basically means I'm getting really good at spotting what doesn't work for my audience. This insight is gold—it stops me from wasting time on content that won’t catch on. The sensitivity score, though, suggests I could dive deeper into what makes content stick, perhaps by looking more into what engaging videos have in common.
+In a nutshell, these models aren’t just tools; they’re the roadmap to make my channel - PrinceRez not just another CODM channel, but the go-to place for content that’s as engaging as it is unique. By blending what works on a broad scale with our special sauce, we’re not just following trends—we’re setting them.
 
-For other CODM channels, the DecisionTree model sheds light on the broader trends that resonate with the community. It's not perfect, but it gives me a bead on the pulse of what's hot, allowing me to tweak my content to match wider interests while keeping our unique PrinceRez flavor.
+**Future Tasks**:
 
-The SVM model, applied across a merged dataset of several channels, stands out for its balanced take on what’s engaging and what’s not. This tells me content creation is a fine art, needing a mix of broad appeal and niche content that speaks directly to our audience.
-
-Putting these models together, I'm carving out a strategy that’s both smart and flexible. Here’s the game plan:
-
--   **Content Differentiation**: By comparing model insights, I can pinpoint what sets PrinceRez apart. This means doubling down on what we do best, setting us apart from the crowd.
-
--   **Audience Understanding**: These models help me get my head around the varied tastes within our audience. It’s about creating content that not only rides the CODM wave but also has that special PrinceRez twist.
-
--   **Strategic Content Planning**: Armed with predictions, I can schedule our content more strategically—hitting the publish button when engagement’s likely to spike and experimenting when we can afford to take risks.
-
--   **Continuous Improvement**: This isn’t a one-and-done deal. By keeping the models sharp with fresh data, I’m always a step ahead of the game, tweaking our strategy to keep our content fresh and engaging.
-
-In a nutshell, these models aren’t just tools; they’re my roadmap to making PrinceRez not just another CODM channel, but the go-to place for content that’s as engaging as it is unique. By blending what works on a broad scale with our special sauce, we’re not just following trends—we’re setting them.
+1.  Instead of comparing my channel to just 3 channels, I need to find more similar channels and increase my other_combined and merged datasets to get understand the broad trends better.
+2.  Apply other machine learning algorithms such as AdaBoost, XGBoost, etc (which is missed here) and deep learning algorithms to see if there's a better recall score.
+3.  Further find the best hyper-parameters for tuning the 3 models selected to get better results. s

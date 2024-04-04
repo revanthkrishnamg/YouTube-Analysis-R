@@ -1,0 +1,708 @@
+---
+title: "YouTube Channel Analysis"
+format: html
+theme: cyborg
+---
+
+## Business Case:
+
+In the competitive landscape of YouTube content creation, especially within the Call of Duty Mobile (CODM) community, understanding what drives viewer engagement is crucial for growth. This project aims to understand engagement across different channels, including my own channel (PrinceRez Codm), by using data analytics and machine learning. The approach here is to build three distinct models, each focusing on different segements of data: PrinceRez Codm channel data, aggregate data from other CODM channels, and a combined dataset encompassing both. This approach allows for a nuanced analysis of engagement drivers, balancing between my channel specific trends and broader industry patterns.
+
+The project seeks to answer several key questions:
+
+-   What unique engagement patterns are present in the PrinceRez Codm channel?
+
+-   Are there general engagement trends across the CODM YouTube community?
+
+-   How does combining these insights through a combined model improve engagement prediction accuracy?
+
+This strategy uses the diversity of data (from specific to general) and the independence of errors among models to increase the accuracy of engagement predictions. Through validation, the project will demonstrate the superiority of a combined model approach over single-source predictions, providing actionable insights to optimize content strategy for increased viewer engagement.
+
+```{mermaid}
+flowchart TD
+    A[Start] -->|PrinceRez Codm Data| B1(PrinceRez Codm Dataset)
+    A -->|Carnage Codm Data| B2(Carnage Codm Dataset)
+    A -->|Ednox Codm Data| B3(Ednox Codm Dataset)
+    A -->|2noob4u Codm Data| B4(2noob4u Codm Dataset)
+    
+    B1 --> C1{Segment Datasets}
+    B2 --> C2[Aggregate 3 Channels]
+    B3 --> C2
+    B4 --> C2
+    C2 --> C1
+    C1 -->|All 4 Channels Combined| D[Combined Dataset]
+    C1 -->|PrinceRez Codm Only| E[PrinceRez Dataset]
+    C2 -->|Other 3 Channels Combined| F[Other Channels Dataset]
+
+    D --> G[Data Cleaning]
+    E --> G
+    F --> G
+    
+    G --> H[Feature Engineering]
+    
+    H --> I{Model Building}
+    I --> J[PrinceRez Model]
+    I --> K[Other Channels Model]
+    I --> L[Combined Model]
+
+    J --> M[Model Predictions]
+    K --> M
+    L --> M
+
+    M --> N[End]
+    
+    style A fill:#f9f,stroke:#333,stroke-width:4px
+    style N fill:#ccf,stroke:#333,stroke-width:4px
+```
+
+**Description of the Diagram**
+
+-   **Start**: The process begins with four separate datasets: PrinceRez Codm, Carnage Codm, Ednox Codm and 2noob4u Codm.
+-   **Segment Datasets**: These datasets are then segmented into three groups for further analysis:
+    -   **PrinceRez Codm Dataset**: This dataset remains as is, focusing solely on the user's channel data.
+    -   **Aggregate 3 Channels**: The datasets from Carnage Codm, Ednox Codm and 2noob4u Codm are combined to form a dataset representing other channels.
+    -   **Combined Dataset**: All four datasets are merged to create a comprehensive dataset that includes both the user's channel and the other three channels.
+-   **Data Cleaning**: Each of the three datasets undergoes a cleaning process to ensure data quality and consistency.
+-   **Feature Engineering**: Post-cleaning, feature engineering is applied to each dataset to prepare for model building. This step involves creating new features that could help in predicting engagement more accurately.
+-   **Model Building**: Separate models are built for each of the three datasets:
+    -   A model specifically for the PrinceRez dataset.
+    -   A model for the combined dataset of the other three channels.
+    -   A model that uses the combined dataset of all four channels.
+-   **Model Predictions**: Each model generates predictions based on the features engineered from their respective datasets.
+-   **End**: The process concludes with the final predictions, which can be used for various analytical and strategic purposes, such as understanding audience engagement and optimizing content strategy.
+
+## I. Importing and Segmenting the Data
+
+Here, I'm importing the 4 datasets and segregating them in segments.
+
+```{r setup, include=FALSE}
+library(readr)
+library(dplyr)
+library(lubridate)
+library(stringr)
+library(ggplot2)
+library(tm)
+library(wordcloud)
+options(warn = -1)
+```
+
+```{r}
+# Specifying column types
+col_types <- cols(
+  video_id = col_character(),
+  title = col_character(),
+  description = col_character(),
+  upload_date = col_datetime(format = ""),
+  duration = col_character(),
+  definition = col_character(),
+  video_status = col_character(),
+  view_count = col_double(),
+  like_count = col_double(),
+  comment_count = col_character() # Treating comment_count as character for consistency
+)
+
+file_paths <- c(
+  "C:/Users/Administrator/Documents/R_2/2noob4u_Codm_Videos.csv", 
+  "C:/Users/Administrator/Documents/R_2/Carnage_Codm_Videos.csv", 
+  "C:/Users/Administrator/Documents/R_2/Ednox_Codm_Videos.csv", 
+  "C:/Users/Administrator/Documents/R_2/PrinceRez_Codm_Videos.csv"
+)
+
+# Merging the datasets
+merged_data <- lapply(file_paths, function(x) {
+  channel_name <- tools::file_path_sans_ext(basename(x)) %>% gsub("_Codm_Videos", "", .)
+  temp_data <- read_csv(x, col_types = col_types) %>% mutate(channel_name = channel_name)
+  return(temp_data)
+}) %>% bind_rows()
+
+# Converting comment_count to numeric
+merged_data$comment_count <- as.numeric(as.character(merged_data$comment_count))
+
+# Segmenting the merged data for different models
+data_princerez <- merged_data %>% filter(channel_name == "PrinceRez")
+data_other_channels <- merged_data %>% filter(channel_name != "PrinceRez")
+
+head(merged_data)
+head(data_princerez)
+head(data_other_channels)
+```
+
+## II. Data Cleaning (applied to each dataset)
+
+Instead of each data segments, firstly I cleaned one dataset and then made a function for it and passed all the datasets, making the code modular (have followed this approach throughout). Here, I started with handling missing values, then dropped the video_status column (since it had only 1 category - public), converted ISO 8601 durations to seconds and removed duplicate rows.
+
+```{r}
+library(dplyr)
+
+clean_data <- function(dataset) {
+  # 1. Handling missing values
+  dataset$description[is.na(dataset$description)] <- "Empty"
+  dataset$comment_count <- ifelse(is.na(as.numeric(as.character(dataset$comment_count))), 0, as.numeric(as.character(dataset$comment_count)))
+  
+  # 2. Dropping the 'video_status' column
+  dataset <- dataset %>% select(-video_status)
+  
+  # 3. Converting ISO 8601 durations to seconds 
+  # Custom function to parse ISO 8601 durations and convert to total seconds
+  parse_duration <- function(duration) {
+    total_seconds <- 0
+    if (!is.na(duration) && duration != "") {
+      # Match groups for hours, minutes, and seconds
+      matches <- regmatches(duration, gregexpr("([0-9]+)([HMS])", duration, perl = TRUE))
+      for (match in matches[[1]]) {
+        value <- as.numeric(sub("([HMS])", "", match))
+        unit <- gsub("[0-9]+", "", match)
+        
+        if (unit == "H") {
+          total_seconds <- total_seconds + value * 3600
+        } else if (unit == "M") {
+          total_seconds <- total_seconds + value * 60
+        } else if (unit == "S") {
+          total_seconds <- total_seconds + value
+        }
+      }
+    }
+    return(total_seconds)
+  }
+  
+  # Applying the custom function to the 'duration' column
+  dataset$duration <- sapply(dataset$duration, parse_duration)
+  dataset$duration <- as.integer(dataset$duration)
+  
+  # 4. Removing duplicate rows
+  dataset <- dataset[!duplicated(dataset), ]
+  
+  return(dataset)
+}
+
+# Apply cleaning function to each dataset
+data_princerez <- clean_data(data_princerez)
+data_other_channels <- clean_data(data_other_channels)
+merged_data <- clean_data(merged_data)
+```
+
+## III. Feature Engineering (applied to each dataset)
+
+Similarly as above, made a feature_engineering function and applied it to all my datasets. Features created for each dataset are:\
+1. Features from time decomposition\
+2. Video Length Category\
+3. Engagement Score\
+4. Engagement Category\
+5. Title & Description Keywords
+
+```{r}
+feature_engineering <- function(dataset) {
+  # Time of Upload
+  dataset$upload_hour <- format(dataset$upload_date, "%H")
+  dataset$upload_day <- format(dataset$upload_date, "%d")
+  dataset$upload_month <- format(dataset$upload_date, "%m")
+  dataset$upload_year <- format(dataset$upload_date, "%Y")
+  dataset$day_of_week <- as.integer(format(dataset$upload_date, "%u")) - 1
+  dataset$is_weekend <- ifelse(dataset$day_of_week >= 5, 1, 0)
+  
+  # Video Length Category
+  dataset$duration_category <- cut(dataset$duration,
+                                   breaks = c(0, 60, 300, Inf),
+                                   labels = c("short", "medium", "long"),
+                                   right = FALSE)
+  
+  # Log Transformation with epsilon -> 1 to avoid log(0)
+  epsilon <- 1
+  dataset$log_view_count <- log(dataset$view_count + epsilon)
+  dataset$log_like_count <- log(dataset$like_count + epsilon)
+  dataset$log_comment_count <- log(dataset$comment_count + epsilon)
+  
+  # Z-Score Normalization
+  z_score_normalization <- function(x) {
+    (x - mean(x, na.rm = TRUE)) / sd(x, na.rm = TRUE)
+  }
+  dataset$z_view_count <- z_score_normalization(dataset$log_view_count)
+  dataset$z_like_count <- z_score_normalization(dataset$log_like_count)
+  dataset$z_comment_count <- z_score_normalization(dataset$log_comment_count)
+  
+  # Engagement Score Calculation
+  calculate_z_weighted_engagement_score <- function(z_view, z_like, z_comment) {
+    score <- z_view * 65 + z_like * 25 + z_comment * 10
+    return(score)
+  }
+  
+  temp_scores <- mapply(calculate_z_weighted_engagement_score, 
+                        dataset$z_view_count, dataset$z_like_count, dataset$z_comment_count)
+  
+  # Rescaling to 0-100 range
+  dataset$engagement_score <- (temp_scores - min(temp_scores, na.rm = TRUE)) / 
+    (max(temp_scores, na.rm = TRUE) - min(temp_scores, na.rm = TRUE)) * 100
+  
+  # Video Definition Category
+  dataset$definition_numeric <- ifelse(dataset$definition == 'hd', 1, 0)
+  
+  # Length of Title and Description
+  dataset$title_length <- nchar(as.character(dataset$title))
+  dataset$description_length <- nchar(as.character(dataset$description))
+  
+  # Keyword Analysis (for title and description)
+  library(tm) # For stopwords()
+  library(wordcloud) # For wordcloud generation and also provides stopwords()
+  library(stringr) # For string operations
+  
+  # Defining the extract_keywords function
+  extract_keywords <- function(text) {
+    # Ensure text is a character string
+    text <- as.character(text)
+    # Tokenize words by splitting on non-word characters
+    words <- unlist(strsplit(text, "\\W+"))
+    # Load stopwords
+    stopwords_list <- stopwords("en")
+    # Filter out stopwords and non-alpha characters
+    keywords <- words[words %in% stopwords_list == FALSE & grepl("^[[:alpha:]]+$", words)]
+    return(keywords)
+  }
+  
+  # Applying the extract_keywords function to both titles and descriptions
+  dataset$title_keywords <- lapply(dataset$title, extract_keywords)
+  dataset$description_keywords <- lapply(dataset$description, extract_keywords)
+  
+  # Converting lists of keywords back to strings for both titles and descriptions
+  dataset$title_keywords_str <- sapply(dataset$title_keywords, paste, collapse=" ")
+  dataset$description_keywords_str <- sapply(dataset$description_keywords, paste, collapse=" ")
+  
+  
+  # Categorizing Engagement Score
+  dataset$engagement_category <- cut(
+    dataset$engagement_score,
+    breaks = c(-Inf, 50, Inf), # Using 50 as the threshold between Low and High
+    labels = c("Low", "High"),
+    right = FALSE
+  )
+  
+  return(dataset)
+}
+
+# Applying feature engineering to each dataset
+data_princerez <- feature_engineering(data_princerez)
+data_other_channels <- feature_engineering(data_other_channels)
+merged_data <- feature_engineering(merged_data)
+
+```
+
+## IV. Exploratory Data Analaysis and Visualization:
+
+[Shiny App for EDA (click)](https://revanthkrishnamg.shinyapps.io/application/). -\> This application is deployed on shinyapps.io, using this we can understand and compare the different visualizations across different datasets.
+
+Below, is the code I used for deploying the EDA application:
+
+```{r}
+library(shiny)
+library(ggplot2)
+library(dplyr)
+library(tm)
+library(wordcloud)
+library(RColorBrewer)
+library(wordcloud2)  
+library(plotly)
+
+# UI Definition
+ui <- fluidPage(
+  tags$head(
+    tags$style(HTML("
+      #wordcloudOutput { 
+        margin-top: -25px; 
+      }
+      .shiny-output-error { 
+        display: none; 
+      }
+    "))
+  ),
+  titlePanel("Exploratory Data Analysis and Visualization"),
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("datasetInput", "Choose a dataset:",
+                  choices = c("Merged Data" = "merged",
+                              "PrinceRez Data" = "princerez",
+                              "Other Channels Data" = "other_channels")),
+      selectInput("analysisType", "Choose an analysis type:",
+                  choices = c("Numerical Features Distribution" = "num_features_dist",
+                              "Class Imbalance" = "class_imbalance",
+                              "Weekday vs Weekend Engagement" = "weekday_weekend",
+                              "Title Length vs Engagement" = "title_length",
+                              "Description Length vs Engagement" = "description_length",
+                              "Video Definition vs Engagement" = "video_definition",
+                              "Video Length Category vs Engagement" = "video_length_category",
+                              "Keyword Analysis - High Engagement Titles" = "keyword_analysis")),
+      conditionalPanel(
+        condition = "input.analysisType == 'num_features_dist'",
+        selectInput("featureInput", "Choose a feature:",
+                    choices = c("View Count" = "view_count",
+                                "Like Count" = "like_count",
+                                "Comment Count" = "comment_count",
+                                "Duration" = "duration",
+                                "Engagement Score" = "engagement_score"))
+      )
+    ),
+    mainPanel(
+      uiOutput("dynamicOutput") # Dynamic output for either plot or word cloud
+    )
+  )
+)
+
+# Server Logic
+server <- function(input, output) {
+  selectedDataset <- reactive({
+    switch(input$datasetInput,
+           "merged" = merged_data,
+           "princerez" = data_princerez,
+           "other_channels" = data_other_channels)
+  })
+  
+  output$dynamicOutput <- renderUI({
+    if (input$analysisType == "keyword_analysis") {
+      wordcloud2Output("wordcloudPlot", width = "100%", height = "400px")
+    } else {
+      plotlyOutput("plotOutput", height = "400px")
+    }
+  })
+  
+  output$plotOutput <- renderPlotly({ 
+    req(selectedDataset()) 
+    dataset <- selectedDataset()
+    analysisType <- input$analysisType
+    plot <- NULL
+    
+    if (analysisType == "num_features_dist") {
+      feature <- input$featureInput
+      plot <- ggplot(dataset, aes_string(x = feature)) +
+        geom_histogram(bins = 50, fill = "blue", color = "black") +
+        ggtitle(paste("Distribution of", feature)) +
+        xlab(feature) +
+        ylab("Frequency")
+    } else if (analysisType == "class_imbalance") {
+      plot <- ggplot(dataset, aes(x = engagement_category)) +
+        geom_bar(fill = "coral") +
+        ggtitle("Class Imbalance in Engagement Category") +
+        xlab("Engagement Category") +
+        ylab("Count")
+    } else if (analysisType == "weekday_weekend") {
+      plot <- ggplot(dataset, aes(x = as.factor(is_weekend), fill = as.factor(is_weekend))) +
+        geom_bar(stat = "identity", position = "dodge") +
+        scale_fill_manual(values = c("0" = "skyblue", "1" = "orange")) +
+        labs(title = "Engagement Score by Day Type", x = "Day Type", y = "Count")
+    } else if (analysisType == "title_length" || analysisType == "description_length") {
+      feature <- ifelse(analysisType == "title_length", "title_length", "description_length")
+      plot <- ggplot(dataset, aes_string(x = feature, y = "engagement_score")) +
+        geom_point(color = "dodgerblue") +
+        geom_smooth(method = "lm", color = "red") +
+        labs(title = paste("Engagement Score by", gsub("_", " ", feature)), y = "Engagement Score", x = feature)
+    } else if (analysisType == "video_definition") {
+      plot <- ggplot(dataset, aes(x = definition, fill = definition)) +
+        geom_bar() +
+        scale_fill_brewer(palette = "Pastel1") +
+        labs(title = "Count by Video Definition", x = "Video Definition", y = "Count")
+    } else if (analysisType == "video_length_category") {
+      plot <- ggplot(dataset, aes(x = duration_category, fill = duration_category)) +
+        geom_bar() +
+        scale_fill_brewer(palette = "Set3") +
+        labs(title = "Count by Video Length Category", x = "Video Length Category", y = "Count")
+    }
+    
+    if (!is.null(plot)) {
+      ggplotly(plot)
+    }
+  })
+  
+  output$wordcloudPlot <- renderWordcloud2({
+    req(input$analysisType == "keyword_analysis")
+    dataset <- selectedDataset()
+    high_engagement_titles <- dataset$title[dataset$engagement_category == "High"]
+    
+    words <- tolower(unlist(strsplit(high_engagement_titles, "\\s+")))
+    words <- words[!words %in% stopwords("en")] 
+    word_freq <- table(words) 
+    word_freq <- as.data.frame(word_freq, stringsAsFactors = FALSE)
+    colnames(word_freq) <- c("word", "freq")
+    wordcloud2(word_freq, size = 0.7)
+  })
+}
+```
+
+## V. Model Building
+
+Firstly, the data is prepared by transforming categorical variables into numerical formats through one-hot encoding, using model.matrix for dummy variable creation. This process simplifies complex relationships into binary columns, making the dataset more digestible for algorithms. By selectively pruning features, the script ensures only variables with potential impact on model performance are retained.
+
+Secondly, transitioning into model building, the code uses the caret package to streamline the training and evaluation of various traditional algorithms, including Logistic Regression, KNN, Decision Trees, Random Forest, Gaussian Naive Bayes, and SVM. This approach includes tailored preprocessing steps like centering and scaling, which is crucial for optimizing each model's input data. The function crafted for model evaluation emphasizes not just accuracy but also Recall and F1 Score in identifying true positives.
+
+Thirdly, based on the recall, selected 3 models for each dataset and further built them separately showing the confusion matrix and the area under curve (AUC) plot.
+
+Preparing the datasets for model building:
+
+```{r}
+library(dplyr)
+
+prepare_dataset <- function(dataset) {
+  # Applying one-hot encoding
+  dataset <- dataset %>%
+    mutate(definition_hd = as.integer(definition == "hd"),
+           is_weekend = as.integer(is_weekend == 1)) %>%
+    select(-definition) # Remove the original 'definition' column
+  
+  # Convert to factors to ensure categorical treatment
+  dataset$duration_category <- as.factor(dataset$duration_category)
+  dataset$day_of_week <- as.factor(dataset$day_of_week)
+  dataset$engagement_category <- as.factor(dataset$engagement_category)
+  
+  # Using model.matrix to create one-hot encoded columns
+  dataset_with_dummies <- cbind(dataset, model.matrix(~ duration_category + day_of_week + engagement_category - 1, data = dataset))
+
+  dataset_with_dummies <- select(dataset_with_dummies, -c(duration_category, day_of_week, engagement_category))
+  
+  relevant_features <- c("duration", "definition_hd", "upload_hour", "upload_day", "upload_month", "upload_year", "is_weekend",
+                         grep("duration_category", names(dataset_with_dummies), value = TRUE),
+                         grep("day_of_week", names(dataset_with_dummies), value = TRUE),
+                         grep("engagement_category", names(dataset_with_dummies), value = TRUE))
+  
+  # Keeping only the relevant features
+  dataset_final <- dataset_with_dummies[, relevant_features]
+  
+  return(dataset_final)
+}
+
+# Applying the function to the datasets
+data_princerez_prepared <- prepare_dataset(data_princerez)
+data_other_channels_prepared <- prepare_dataset(data_other_channels)
+merged_data_prepared <- prepare_dataset(merged_data)
+
+
+# Removing some columns which are not important for the modelling
+data_princerez_prepared <- data_princerez_prepared %>%
+  select(-upload_year, -duration_categorylong, -upload_day, -upload_month)
+data_other_channels_prepared <- data_other_channels_prepared %>%
+  select(-upload_year, -duration_categorylong, -upload_day, -upload_month)
+merged_data_prepared <- merged_data_prepared %>%
+  select(-upload_year, -duration_categorylong, -upload_day, -upload_month)
+
+data_princerez_prepared <- data_princerez_prepared %>%
+  mutate(upload_hour = as.integer(upload_hour))
+data_other_channels_prepared <- data_other_channels_prepared %>%
+  mutate(upload_hour = as.integer(upload_hour))
+merged_data_prepared <- merged_data_prepared %>%
+  mutate(upload_hour = as.integer(upload_hour))
+```
+
+**Modelling**
+
+```{r}
+library(caret)
+library(plyr)
+library(dplyr)
+library(e1071) 
+library(pROC)
+
+train_and_evaluate_models <- function(dataset, target_column) {
+  # Ensure the target column is a factor with valid R variable names for levels
+  dataset[[target_column]] <- as.factor(dataset[[target_column]])
+  levels(dataset[[target_column]]) <- make.names(levels(dataset[[target_column]]))
+  
+  # Split the data into features and target
+  y <- dataset[[target_column]]
+  X <- dataset %>% select(-which(names(dataset) == target_column))
+  
+  # Creating training and test sets - 70% train, 30% test
+  set.seed(0)
+  trainIndex <- createDataPartition(y, p = .7, list = FALSE)
+  X_train <- X[trainIndex, ]
+  y_train <- y[trainIndex]
+  X_test <- X[-trainIndex, ]
+  y_test <- y[-trainIndex]
+  
+  models <- list(
+    LogisticRegression = list(model = "glm", preProcess = TRUE),
+    KNN = list(model = "knn", preProcess = TRUE),
+    DecisionTree = list(model = "rpart", preProcess = FALSE),
+    RandomForest = list(model = "rf", preProcess = FALSE),
+    GaussianNB = list(model = "nb", preProcess = TRUE),
+    SVM = list(model = "svmLinear", preProcess = TRUE)
+  )
+  
+  results_list <- list()
+  
+  for (model_name in names(models)) {
+    cat("Training and evaluating model:", model_name, "\n")
+    
+    current_model <- models[[model_name]]
+    model_info <- trainControl(method = "cv", number = 5, classProbs = TRUE, summaryFunction = twoClassSummary)
+    
+    if (current_model$preProcess) {
+      preProcess_params <- preProcess(X_train, method = c("center", "scale"))
+      X_train_processed <- predict(preProcess_params, X_train)
+      X_test_processed <- predict(preProcess_params, X_test)
+    } else {
+      X_train_processed <- X_train
+      X_test_processed <- X_test
+    }
+      trained_model <- train(x = X_train_processed, y = y_train, method = current_model$model, trControl = model_info)
+      predictions <- predict(trained_model, newdata = X_test_processed)
+    
+    cm <- confusionMatrix(predictions, y_test)
+    
+    results_list[[model_name]] <- list(
+      Model = model_name,
+      Accuracy = cm$overall['Accuracy'],
+      Recall = cm$byClass['Sensitivity'],
+      F1_Score = cm$byClass['F1']
+    )
+  }
+  
+  results_df <- ldply(results_list, data.frame)
+  
+  return(results_df)
+}
+
+# Applying the function to the datasets
+results_princerez <- train_and_evaluate_models(data_princerez_prepared, "engagement_categoryHigh")
+results_other_channels <- train_and_evaluate_models(data_other_channels_prepared, "engagement_categoryHigh")
+results_merged <- train_and_evaluate_models(merged_data_prepared, "engagement_categoryHigh")
+
+print(results_princerez)
+print(results_other_channels)
+print(results_merged)
+```
+
+From the above we see that:\
+For Princerez channel RandomForest shows the highest recall at 0.6097561. This is the best model in the Princerez scenario for focusing on class high engagment.\
+For other_channels -\> DecisionTree has the highest recall at 0.72727273.\
+For merged -\> SVM stands has the highest recall of 0.6696429 in the merged dataset.
+
+Taking the best models from the above for the 3 datasets and building them separately (with confusion matrix and ROC curves for each):
+
+```{r}
+### TAKING THE BEST MODELS FOR THE 3 DATASETS AND BUILDING THEM
+
+train_model_and_evaluate <- function(dataset, model_type, target_column, save_filename) {
+  # Ensuring the target column is a factor
+  dataset[[target_column]] <- as.factor(dataset[[target_column]])
+  levels(dataset[[target_column]]) <- make.names(levels(dataset[[target_column]]))
+  
+  # Splitting the data into features and target
+  y <- dataset[[target_column]]
+  X <- dataset %>% select(-which(names(dataset) == target_column))
+  
+  # Splitting into training and test sets, similar as above, 70% train and 30% test
+  set.seed(0) 
+  trainIndex <- createDataPartition(y, p = .7, list = FALSE)
+  X_train <- X[trainIndex, ]
+  y_train <- y[trainIndex]
+  X_test <- X[-trainIndex, ]
+  y_test <- y[-trainIndex]
+  
+  # Training the model
+  model_info <- trainControl(method = "cv", number = 5, classProbs = TRUE, summaryFunction = twoClassSummary)
+  if(model_type == "SVM") {
+    model <- train(x = X_train, y = y_train, method = "svmLinear", trControl = model_info)
+  } else {
+    model <- train(x = X_train, y = y_train, method = model_type, trControl = model_info)
+  }
+  
+  # Predicting on the test set
+  predictions <- predict(model, X_test)
+  prob_predictions <- predict(model, X_test, type = "prob")[,2] # Get class probabilities for ROC
+  
+  # Confusion Matrix
+  cm <- confusionMatrix(predictions, y_test)
+  print(cm)
+  
+  # ROC curve and AUC
+  roc_result <- roc(response = y_test, predictor = as.numeric(prob_predictions), levels = rev(levels(y_test)))
+  plot(roc_result, main = paste("ROC Curve for", model_type))
+  print(auc(roc_result))
+  
+  # Saving the model
+  saveRDS(model, save_filename)
+}
+
+# Applying it to our datasets
+train_model_and_evaluate(data_princerez_prepared, "rf", "engagement_categoryHigh", "model_princerez.rds") # RandomForest for Princerez
+train_model_and_evaluate(data_other_channels_prepared, "rpart", "engagement_categoryHigh", "model_other_channels.rds") # DecisionTree for other_channels
+train_model_and_evaluate(merged_data_prepared, "svmLinear", "engagement_categoryHigh", "model_merged.rds") # SVM for merged
+
+```
+
+**MODEL RESULTS:**
+
+**Random Forest for Princerez Channel**
+
+-   **Confusion Matrix Insights:** The RandomForest model for the Princerez dataset shows a notable accuracy of 82.22%, with a high specificity (100%) indicating that all true negatives were correctly identified. However, the sensitivity or recall (60.98%) suggests that the model is less adept at catching all true positives. The balanced accuracy of 80.49% indicates good overall performance but highlights room for improvement in recognizing true positive cases.
+
+-   **AUC Plot Analysis:** The AUC value of 0.7755 reflects a good level of model discrimination ability. It signifies the model's capability to distinguish between the classes but also hints that there's potential for enhancement, especially in identifying high engagement videos more reliably.
+
+**DecisionTree for Other Channels**
+
+-   **Confusion Matrix Insights:** This model presents an accuracy of 64.13%, which is modest. The sensitivity (51.14%) and specificity (74.03%) showcase a challenge in correctly predicting high engagement videos while being reasonably good at avoiding false alarms. The relatively low kappa statistic (0.2561) points to only a slight agreement between the predictions and actual values, beyond what would be expected by chance.
+
+-   **AUC Plot Analysis:** With an AUC of 0.6697, the model demonstrates a fair but not excellent ability to differentiate between the high and low engagement classes. This suggests a need for refinement in how the model discerns patterns indicative of viewer engagement.
+
+**SVM for Merged Dataset**
+
+-   **Confusion Matrix Insights:** The SVM model's accuracy stands at 63.05%, with balanced accuracy (63.41%) reflecting a moderate performance. The model shows a somewhat balanced sensitivity (66.96%) and specificity (59.85%), indicating a reasonable ability to identify both true positives and true negatives. However, the differences between positive predictive value (57.69%) and negative predictive value (68.91%) suggest variability in prediction confidence across classes.
+
+-   **AUC Plot Analysis:** The AUC of 0.6437 is the lowest among the three models, suggesting that while the SVM model can differentiate between classes to some degree, its capacity to do so is limited. This highlights the need for potential adjustments in model parameters or the incorporation of more discriminative features.
+
+## VI. Final Test predictions
+
+```{r}
+# Loading the models
+model_princerez <- readRDS("model_princerez.rds")
+model_other_channels <- readRDS("model_other_channels.rds")
+model_merged <- readRDS("model_merged.rds")
+
+# 3 rows of Test Data
+test_data <- data.frame(
+  duration = c(60, 120, 180), 
+  definition_hd = c(1, 1, 0), 
+  upload_hour = c(15, 8, 22), 
+  is_weekend = c(0, 1, 0), 
+  duration_categoryshort = c(1, 0, 0), 
+  duration_categorymedium = c(0, 1, 0),
+  day_of_week1 = c(0, 0, 1),
+  day_of_week2 = c(1, 0, 0),
+  day_of_week3 = c(0, 1, 0),
+  day_of_week4 = c(0, 0, 0),
+  day_of_week5 = c(0, 0, 0),
+  day_of_week6 = c(0, 0, 0)
+)
+
+# Making predictions with each model 
+predictions_princerez <- predict(model_princerez, test_data, type = "raw")
+predictions_other_channels <- predict(model_other_channels, test_data, type = "raw")
+predictions_merged <- predict(model_merged, test_data, type = "raw")
+
+# Combining predictions to get the majority vote 
+get_majority_vote <- function(princerez, other_channels, merged) {
+  votes <- c(princerez, other_channels, merged)
+  majority_vote <- ifelse(sum(votes == "X1") >= 2, "X1", "X0")
+  return(majority_vote)
+}
+
+final_predictions <- mapply(get_majority_vote, predictions_princerez, predictions_other_channels, predictions_merged)
+
+# Print final predictions
+print(final_predictions)
+```
+
+## VII. Conclusion
+
+Using the Random Forest model on my PrinceRez Codm channel, I've seen impressive accuracy and specificity, which basically means I'm getting really good at spotting what doesn't work for my audience. This insight is gold—it stops me from wasting time on content that won’t catch on. The sensitivity score, though, suggests I could dive deeper into what makes content stick, perhaps by looking more into what engaging videos have in common.
+
+For other CODM channels, the DecisionTree model sheds light on the broader trends that resonate with the community. It's not perfect, but it gives me a bead on the pulse of what's hot, allowing me to tweak my content to match wider interests while keeping our unique PrinceRez flavor.
+
+The SVM model, applied across a merged dataset of several channels, stands out for its balanced take on what’s engaging and what’s not. This tells me content creation is a fine art, needing a mix of broad appeal and niche content that speaks directly to our audience.
+
+Putting these models together, I'm carving out a strategy that’s both smart and flexible. Here’s the game plan:
+
+-   **Content Differentiation**: By comparing model insights, I can pinpoint what sets PrinceRez apart. This means doubling down on what we do best, setting us apart from the crowd.
+
+-   **Audience Understanding**: These models help me get my head around the varied tastes within our audience. It’s about creating content that not only rides the CODM wave but also has that special PrinceRez twist.
+
+-   **Strategic Content Planning**: Armed with predictions, I can schedule our content more strategically—hitting the publish button when engagement’s likely to spike and experimenting when we can afford to take risks.
+
+-   **Continuous Improvement**: This isn’t a one-and-done deal. By keeping the models sharp with fresh data, I’m always a step ahead of the game, tweaking our strategy to keep our content fresh and engaging.
+
+In a nutshell, these models aren’t just tools; they’re my roadmap to making PrinceRez not just another CODM channel, but the go-to place for content that’s as engaging as it is unique. By blending what works on a broad scale with our special sauce, we’re not just following trends—we’re setting them.

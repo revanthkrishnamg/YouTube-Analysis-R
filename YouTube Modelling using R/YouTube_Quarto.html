@@ -3389,8 +3389,8 @@ z-index: 1000;
 
     M --&gt; N[End]
     
-    style A fill:#f9f,stroke:#333,stroke-width:4px
-    style N fill:#ccf,stroke:#333,stroke-width:4px
+    style A fill,stroke:#333,stroke-width:4px
+    style N fill,stroke:#333,stroke-width:4px
 </pre>
 </div>
 </div>
@@ -4319,6 +4319,28 @@ Prediction  X0  X1
 </section>
 <section id="vi.-final-test-predictions" class="level2">
 <h2 class="anchored" data-anchor-id="vi.-final-test-predictions">VI. Final Test predictions</h2>
+<div class="cell">
+<div class="cell-output-display">
+<div>
+<div>
+<pre class="mermaid mermaid-js">flowchart TD
+    A[Load Models] --&gt; B[Test Data Preparation]
+    B --&gt;|Predict with PrinceRez Model | C[Random Forest]
+    B --&gt;|Predict with Other Channels Model| D[Decision Tree]
+    B --&gt;|Predict with Combined Model| E[Support Vector Classifier]
+    C --&gt; F[Combine Predictions]
+    D --&gt; F
+    E --&gt; F
+    F --&gt; G[Apply Majority Vote]
+    G --&gt; H[Final Predictions]
+    
+    style A fill,stroke:#333,stroke-width:2px
+    style H fill,stroke:#333,stroke-width:2px
+</pre>
+</div>
+</div>
+</div>
+</div>
 <div class="cell">
 <details>
 <summary>Code</summary>

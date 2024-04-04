@@ -55,8 +55,8 @@ flowchart TD
 
     M --> N[End]
     
-    style A fill:#f9f,stroke:#333,stroke-width:4px
-    style N fill:#ccf,stroke:#333,stroke-width:4px
+    style A fill,stroke:#333,stroke-width:4px
+    style N fill,stroke:#333,stroke-width:4px
 ```
 
 **Description of the Diagram**
@@ -696,6 +696,21 @@ Putting these models together, I'm carving out a strategy that’s both smart an
 -   **Strategic Content Planning**: Armed with predictions, I can schedule the content more strategically—uploading when engagement’s likely to spike and experimenting when we can afford to take risks.
 
 ## VI. Final Test predictions
+```{mermaid}
+flowchart TD
+    A[Load Models] --> B[Test Data Preparation]
+    B -->|Predict with PrinceRez Model | C[Random Forest]
+    B -->|Predict with Other Channels Model| D[Decision Tree]
+    B -->|Predict with Combined Model| E[Support Vector Classifier]
+    C --> F[Combine Predictions]
+    D --> F
+    E --> F
+    F --> G[Apply Majority Vote]
+    G --> H[Final Predictions]
+    
+    style A fill,stroke:#333,stroke-width:2px
+    style H fill,stroke:#333,stroke-width:2px
+```
 
 ```{r}
 # Loading the models

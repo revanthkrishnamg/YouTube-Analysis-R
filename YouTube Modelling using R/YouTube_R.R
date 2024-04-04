@@ -291,10 +291,14 @@ server <- function(input, output) {
         xlab("Engagement Category") +
         ylab("Count")
     } else if (analysisType == "weekday_weekend") {
-      plot <- ggplot(dataset, aes(x = as.factor(is_weekend), fill = as.factor(is_weekend))) +
-        geom_bar(stat = "identity", position = "dodge") +
-        scale_fill_manual(values = c("0" = "skyblue", "1" = "orange")) +
-        labs(title = "Engagement Score by Day Type", x = "Day Type", y = "Count")
+      dataset$is_weekend <- as.factor(ifelse(dataset$is_weekend == 1, "Weekend", "Weekday"))
+      plot <- ggplot(dataset, aes(x = is_weekend, fill = is_weekend)) +
+        geom_bar(stat = "count") +
+        scale_fill_manual(values = c("Weekday" = "skyblue", "Weekend" = "orange"),
+                          name = "Day Type",
+                          labels = c("Weekday", "Weekend")) +
+        labs(title = "Engagement Score by Day Type", x = "", y = "Count") +
+        theme_minimal()
     } else if (analysisType == "title_length" || analysisType == "description_length") {
       feature <- ifelse(analysisType == "title_length", "title_length", "description_length")
       plot <- ggplot(dataset, aes_string(x = feature, y = "engagement_score")) +
@@ -559,3 +563,6 @@ final_predictions <- mapply(get_majority_vote, predictions_princerez, prediction
 
 # Print final predictions
 print(final_predictions)
+
+
+

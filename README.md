@@ -1,7 +1,6 @@
 # YouTube Channel Analysis Project
 
-## Overview
-This project aims to enhance viewer engagement on the "PrinceRez Codm" YouTube channel and other CODM community channels through comprehensive data analytics and machine learning. The focus is on understanding unique engagement patterns, identifying general trends across the community, and optimizing content strategy using a combined model approach.
+Extended Use Case for my other project [YouTube Engagement Optimization GitHub Repository](https://github.com/revanthkrishnamg/YouTube-Engagment-Optimization). 
 
 ## Business Case
 The project analyzes engagement data from "PrinceRez Codm" alongside aggregated data from other CODM channels to discern patterns that drive viewer interaction, aiming to use these insights for content optimization.
